@@ -1,5 +1,5 @@
 samples = glob_wildcards('assemblies/{sample}.fasta.gz').sample
-config['reference]'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
+config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
 
 rule all:
     input:
@@ -62,17 +62,36 @@ rule calculate_variant_level:
         bcftools view --write-index -o {output.vcf[0]}
         '''
 
+rule calculate_reference_coverage:
+    input:
+        paf = rules.minimap2_reference_aligned.output
+    output:
+        bed = 'reference_alignment/{sample}.covered.bed'
+    threads: 1
+    resources:
+        mem_mb = 2500,
+        walltime = '30m'
+    shell:
+        '''
+        cut -f 6,8,9 {input.paf} |\
+        bedtools sort -faidx {config[reference]} -i /dev/stdin |\
+        bedtools merge -d 0 -i /dev/stdin |\
+        bedtools genomecov -g {config[reference]} -i /dev/stdin |\
+        awk '$2==0 {{S[$1]=$4; U[$1]=$5; next}} {{C[$1]=$5}} END {{for (k in C) {{print k,"0",S[k],"{wildcards.sample}",C[k],U[k]}} }}' > {output.bed}
+        '''
+
 rule summarise_sample_metrics:
     input:
         N50 = rules.calculate_N50.output,
         comepleteness = rules.calculate_gene_completeness.output['full_table'],
         variants = rules.calculate_variant_level.output['vcf'],
+        bed = rules.calculate_reference_coverage.output['bed']
     output:
         'summary/{sample}.csv'
     shell:
         '''
         echo -n "{wildcards.sample}," > {output}
-        awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","} }}}' {input.N50}' >> {output}
+        awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50}' >> {output}
 
         '''
 
