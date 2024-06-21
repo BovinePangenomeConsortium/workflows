@@ -34,7 +34,8 @@ rule calculate_gene_completeness:
 
 rule minimap2_reference_aligned:
     input:
-        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
+        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi'),
+        reference = config['reference']
     output:
         'reference_alignment/{sample}.ARS_UCD2.0.paf'
     threads: 4
@@ -43,14 +44,15 @@ rule minimap2_reference_aligned:
         walltime = '2h'
     shell:
         '''
-        minimap2 -t {threads} --cs -cxasm10 {config[reference]} {input.fasta[0]} > {output}
+        minimap2 -t {threads} --cs -cxasm10 {input.reference} {input.fasta[0]} > {output}
         '''
 
 rule calculate_variant_level:
     input:
-        paf = rules.minimap2_reference_aligned.output
+        paf = rules.minimap2_reference_aligned.output,
+        reference = config['reference']
     output:
-        vcf = multiext('reference_alignment/{sample}.vcf.gz','','.tbi')
+        vcf = multiext('reference_alignment/{sample}.vcf.gz','','.csi')
     threads: 1
     resources:
         mem_mb = 5000,
@@ -58,13 +60,14 @@ rule calculate_variant_level:
     shell:
         '''
         sort -k6,6 -k8,8n {input.paf} |\
-        paftools call -f {config[reference]} -s {wildcards.sample} - |\
+        paftools.js call -f {input.reference} -s {wildcards.sample} - |\
         bcftools view --write-index -o {output.vcf[0]}
         '''
 
 rule calculate_reference_coverage:
     input:
-        paf = rules.minimap2_reference_aligned.output
+        paf = rules.minimap2_reference_aligned.output,
+        fai = config['reference'] + ".fai"
     output:
         bed = 'reference_alignment/{sample}.covered.bed'
     threads: 1
@@ -74,10 +77,12 @@ rule calculate_reference_coverage:
     shell:
         '''
         cut -f 6,8,9 {input.paf} |\
-        bedtools sort -faidx {config[reference]} -i /dev/stdin |\
+        bedtools sort -faidx {input.fai} -i /dev/stdin |\
         bedtools merge -d 0 -i /dev/stdin |\
-        bedtools genomecov -g {config[reference]} -i /dev/stdin |\
-        awk '$2==0 {{S[$1]=$4; U[$1]=$5; next}} {{C[$1]=$5}} END {{for (k in C) {{print k,"0",S[k],"{wildcards.sample}",C[k],U[k]}} }}' > {output.bed}
+        bedtools genomecov -g {input.fai} -i /dev/stdin |\
+        awk -v OFS='\\t' '$2==0 {{S[$1]=$4; U[$1]=$5; next}} {{C[$1]=$5}} END {{for (k in C) {{print k,"0",S[k],"{wildcards.sample}",C[k],U[k]}} }}' |\
+        grep -P "^(\d|X|Y|MT)" |\
+        bedtools sort -faidx {input.fai} -i /dev/stdin > {output.bed}
         '''
 
 rule summarise_sample_metrics:
@@ -88,11 +93,17 @@ rule summarise_sample_metrics:
         bed = rules.calculate_reference_coverage.output['bed']
     output:
         'summary/{sample}.csv'
+    resources:
+        walltime = '10m'
     shell:
         '''
         echo -n "{wildcards.sample}," > {output}
-        awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50}' >> {output}
+        awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50} >> {output}
+    
+        #busco analysis
+        bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output}
 
+        awk -v OFS=',' '$1~/[[:digit:]]/ {{A+=$5;++n;next}} {{B[$1]=$5}} END {{print A/n,B["X"],B["Y"]}}' {input.bed} >> {output}
         '''
 
 rule summarise_all_metrics:
@@ -103,5 +114,6 @@ rule summarise_all_metrics:
     localrule: True
     shell:
         '''
+        echo "sample,genome size, N contigs, NG50, SNPs, InDels"
         cat {input} > {output}
         '''
