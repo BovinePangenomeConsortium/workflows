@@ -17,7 +17,7 @@ rule calculate_N50:
         walltime = '10m'
     shell:
         '''
-        seqtk cutN -n 0 {input.fasta[0]} | calN50.js -L 2770686122 - > {output}
+        seqtk cutN -n 0 {input.fasta[0]} | calN50.js -L 3G - > {output}
         '''
 
 rule calculate_gene_completeness:
@@ -121,7 +121,7 @@ rule summarise_sample_metrics:
 
 rule summarise_all_metrics:
     input:
-        expand(rules.summarise_sample_metrics.output,sample=samples)
+        expand(rules.summarise_sample_metrics.output['csv'],sample=samples)
     output:
         'summary.csv'
     localrule: True
