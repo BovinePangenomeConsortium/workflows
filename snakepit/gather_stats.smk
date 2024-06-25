@@ -116,7 +116,7 @@ rule summarise_sample_metrics:
 
         bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output.csv}
 
-        awk -v OFS=',' '$1~/[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"],B["Y"],B["MT"]}}' {input.bed} >> {output.csv}
+        awk -v OFS=',' '$1~/[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
         '''
 
 rule summarise_all_metrics:
@@ -127,6 +127,6 @@ rule summarise_all_metrics:
     localrule: True
     shell:
         '''
-        echo "sample,genome size, N contigs, NG50, SNPs, InDels,autosomes covered, X covered, Y covered, MT covered" > {output}
+        echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" > {output}
         cat {input} >> {output}
         '''
