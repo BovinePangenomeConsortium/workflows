@@ -11,7 +11,7 @@ rule ragtag_scaffold:
         mm2_opt = '-x asm20'
     threads: 8
     resources:
-        mem_mb = 4000,
+        mem_mb = 8000,
         scratch = '10G'
     shell:
         '''
@@ -42,3 +42,16 @@ rule panSN_spec:
         samtools faidx {output[0]}
         '''
 
+rule mash_triangle:
+    input:
+        rules.panSN_spec.output
+    output:
+        'pangenome/tree/{chromosome}.matrix'
+    threads: 4
+    resources:
+        mem_mb = 2500,
+        walltime = '1h'
+    shell:
+        '''
+        mash triangle -i -p {threads} {input[0]} > {output}
+        '''
