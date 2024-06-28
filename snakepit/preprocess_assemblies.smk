@@ -1,5 +1,12 @@
-samples = glob_wildcards('assemblies/{sample}.fasta.gz').sample
 config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
+
+import polars as pl
+
+def get_samples():
+    metadata = pl.read_csv('samplesheet_20240628.csv')
+    return metadata.filter(pl.col('Species')=='Bos taurus').get_column('ID').to_list()
+
+samples = get_samples()
 
 rule ragtag_scaffold:
     input:
@@ -54,4 +61,29 @@ rule mash_triangle:
     shell:
         '''
         mash triangle -i -p {threads} {input[0]} > {output}
+        '''
+
+rule pggb_construct:
+    input:
+        fasta = rules.panSN_spec.output
+    output:
+        graphs = multiext('pangenome/graphs/{chromosome}/pggb','.gfa','.og')
+    threads: 4
+    resources:
+        mem_mb = 2000,
+        walltime = '4h',
+        scratch = '50G'
+    params:
+        _dir = lambda wildcards, output: Path(output.graphs[0]).parent,
+        divergence = 95,#lambda wildcards, input: read_mash_triangle(input.mash[0],True),
+        min_match = 23, #pggb default
+        segment_length = '25k'
+    shell:
+        '''
+        pggb -i {input.fasta[0]} -o {params._dir} -t {threads} \
+        -s {params.segment_length} -p {params.divergence} -k {params.min_match} \
+        --skip-viz --temp-dir $TMPDIR 
+
+        mv {params._dir}/{wildcards.chromosome}.*.smooth.final.gfa {output.graphs[0]}
+        mv {params._dir}/{wildcards.chromosome}.*.smooth.final.og {output.graphs[1]}
         '''
