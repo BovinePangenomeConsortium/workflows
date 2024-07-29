@@ -8,6 +8,23 @@ rule all:
     input:
         'summary.csv'
 
+#many assemblies are gzipped, but we want bgzipped for better random access
+rule rebgzip_assemblies:
+    input:
+        lambda wildcards, output: PurePath(output[0])
+    output:
+        multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
+    threads: 4
+    resources:
+        mem_mb = 2000,
+        walltime = '1h'
+    shell:
+        '''
+        pigz -dc -p 4 {input} |\
+        bgzip -@ 4 -c > {output[0]}
+        samtools index -@ 4 {output[0]}
+        '''
+
 rule calculate_N50:
     input:
         fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
