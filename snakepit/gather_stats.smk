@@ -11,7 +11,7 @@ rule all:
 #many assemblies are gzipped, but we want bgzipped for better random access
 rule rebgzip_assemblies:
     input:
-        lambda wildcards, output: PurePath(output[0])
+        'downloaded_assemblies/{sample}.fa.gz'
     output:
         multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
     threads: 4
@@ -133,7 +133,7 @@ rule summarise_sample_metrics:
 
         bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output.csv}
 
-        awk -v OFS=',' '$1~/[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
+        awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
         '''
 
 rule summarise_all_metrics:
