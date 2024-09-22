@@ -1,34 +1,3 @@
-config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
-
-import polars as pl
-
-def get_samples():
-    metadata = pl.read_csv('samplesheet_20240628.csv')
-    return metadata.filter(pl.col('Species')=='Bos taurus').get_column('ID').to_list()
-
-samples = get_samples()
-
-rule ragtag_scaffold:
-    input:
-        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi'),
-        reference = config['reference']
-    output:
-        fasta = multiext('pangenome/rescaffolded/{sample}.fasta.gz','','.fai','.gzi')
-    params:
-        mm2_opt = '-x asm20'
-    threads: 8
-    resources:
-        mem_mb = 8000,
-        scratch = '10G'
-    shell:
-        '''
-        seqtk cutN -n 0 {input.fasta[0]} > $TMPDIR/asm.fa
-        ragtag.py scaffold {input.reference} $TMPDIR/asm.fa -o $TMPDIR --mm2-params "{params.mm2_opt} -t {threads}" 
-
-        sed 's/_RagTag//g' $TMPDIR/ragtag.scaffold.fasta |
-        bgzip -@ {threads} -c > {output.fasta[0]}
-        samtools faidx {output.fasta[0]}
-        '''
 
 rule panSN_spec:
     input:
@@ -82,7 +51,7 @@ rule pggb_construct:
         '''
         pggb -i {input.fasta[0]} -o {params._dir} -t {threads} \
         -s {params.segment_length} -p {params.divergence} -k {params.min_match} \
-        --skip-viz --temp-dir $TMPDIR 
+        --skip-viz --temp-dir $TMPDIR
 
         mv {params._dir}/{wildcards.chromosome}.*.smooth.final.gfa {output.graphs[0]}
         mv {params._dir}/{wildcards.chromosome}.*.smooth.final.og {output.graphs[1]}
