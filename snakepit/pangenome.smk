@@ -1,3 +1,35 @@
+# Uses the layout defined in the BPC spreadsheet
+def map_ID_to_filename(**wildcards):
+    filename_map = dict(pl.read_csv('metdata.csv')
+                       .select(['ID','Filename'])
+                       .iter_rows())
+    return filename_map[wildcards.sample]
+
+rule panSN_renaming:
+    input:
+        lambda wildcards: expand(rules.ragtag_scaffold.output['fasta'][0],sample=map_ID_to_filename(wildcards.sample))
+    output:
+        'data/freeze_1/{sample}.fa.gz'
+    shell:
+        '''
+        # we want to rename the chromosomes in panSN
+        # we also want to rename the output file to match the ID schema
+        # rename -> can we just modify ragtag based on the agp?
+        '''
+
+rule agc_create:
+    input:
+        assemblies = expand(rules.panSN_renaming.output['fasta'],samples=samples)
+    output:
+        agc = 'data/freeze_1/BPC_freeze_1.agc'
+    threads: 8
+    resources:
+        mem_mb_per_cpu = 8000,
+        runtime = '4h'
+    shell:
+        '''
+        agc create -d -t {threads} {input.assemblies} > {output.agc}
+        '''
 
 rule panSN_spec:
     input:
@@ -30,29 +62,4 @@ rule mash_triangle:
     shell:
         '''
         mash triangle -i -p {threads} {input[0]} > {output}
-        '''
-
-rule pggb_construct:
-    input:
-        fasta = rules.panSN_spec.output
-    output:
-        graphs = multiext('pangenome/graphs/{chromosome}/pggb','.gfa','.og')
-    threads: 4
-    resources:
-        mem_mb = 2000,
-        walltime = '4h',
-        scratch = '50G'
-    params:
-        _dir = lambda wildcards, output: Path(output.graphs[0]).parent,
-        divergence = 95,#lambda wildcards, input: read_mash_triangle(input.mash[0],True),
-        min_match = 23, #pggb default
-        segment_length = '25k'
-    shell:
-        '''
-        pggb -i {input.fasta[0]} -o {params._dir} -t {threads} \
-        -s {params.segment_length} -p {params.divergence} -k {params.min_match} \
-        --skip-viz --temp-dir $TMPDIR
-
-        mv {params._dir}/{wildcards.chromosome}.*.smooth.final.gfa {output.graphs[0]}
-        mv {params._dir}/{wildcards.chromosome}.*.smooth.final.og {output.graphs[1]}
         '''
