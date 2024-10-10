@@ -1,6 +1,6 @@
 from pathlib import PurePath
 
-samples = glob_wildcards('assemblies/{sample}.fasta.gz').sample
+samples = glob_wildcards('data/raw_assemblies/{sample}.fasta.gz').sample
 config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
 config['busco_map'] = 'busco_map.tsv'
 
@@ -13,7 +13,7 @@ rule rebgzip_assemblies:
     input:
         'downloaded_assemblies/{sample}.fa.gz'
     output:
-        multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
+        multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
     threads: 4
     resources:
         mem_mb = 2000,
@@ -27,9 +27,9 @@ rule rebgzip_assemblies:
 
 rule calculate_N50:
     input:
-        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
+        fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
     output:
-        'contiguity/{sample}.N50'
+        'analyses/QC/contiguity/{sample}.N50'
     resources:
         walltime = '10m'
     shell:
@@ -39,9 +39,9 @@ rule calculate_N50:
 
 rule calculate_gene_completeness:
     input:
-        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi')
+        fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
     output:
-        metrics = expand('completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
+        metrics = expand('analyses/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
     params:
         _dir = lambda wildcards, output: PurePath(output['metrics'][0]).parent
     threads: 4
@@ -57,10 +57,10 @@ rule calculate_gene_completeness:
 
 rule minimap2_reference_aligned:
     input:
-        fasta = multiext('assemblies/{sample}.fasta.gz','','.fai','.gzi'),
+        fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi'),
         reference = config['reference']
     output:
-        'reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
+        'analyses/QC/reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
     threads: 4
     resources:
         mem_mb = 10000,
@@ -76,7 +76,7 @@ rule calculate_variant_level:
         paf = rules.minimap2_reference_aligned.output,
         reference = config['reference']
     output:
-        vcf = multiext('reference_alignment/{sample}.vcf.gz','','.csi')
+        vcf = multiext('analyses/QC/reference_alignment/{sample}.vcf.gz','','.csi')
     threads: 1
     resources:
         mem_mb = 5000,
@@ -94,7 +94,7 @@ rule calculate_reference_coverage:
         paf = rules.minimap2_reference_aligned.output,
         fai = config['reference'] + ".fai"
     output:
-        bed = 'reference_alignment/{sample}.covered.bed'
+        bed = 'analyses/QC/reference_alignment/{sample}.covered.bed'
     threads: 1
     resources:
         mem_mb = 2500,
@@ -118,8 +118,8 @@ rule summarise_sample_metrics:
         bed = rules.calculate_reference_coverage.output['bed'],
         busco_map = config['busco_map']
     output:
-        csv = 'summary/{sample}.csv',
-        busco = 'completeness/{sample}.csv'
+        csv = 'analyses/QC/summary/{sample}.csv',
+        busco = 'analyses/QC/completeness/{sample}.csv'
     resources:
         walltime = '10m'
     shell:
@@ -140,7 +140,7 @@ rule summarise_all_metrics:
     input:
         expand(rules.summarise_sample_metrics.output['csv'],sample=samples)
     output:
-        'summary.csv'
+        'analyses/QC/summary.csv'
     localrule: True
     shell:
         '''
