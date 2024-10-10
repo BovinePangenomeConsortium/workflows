@@ -7,19 +7,29 @@ def map_ID_to_filename(**wildcards):
 
 rule panSN_renaming:
     input:
-        lambda wildcards: expand(rules.ragtag_scaffold.output['fasta'][0],sample=map_ID_to_filename(wildcards.sample))
+        fasta = rules.cut_assemblies_at_gaps.output['fasta'],
+        agp = lambda wildcards: expand(rules.ragtag_scaffold.output[0],sample=map_ID_to_filename(wildcards.sample))
     output:
-        'data/freeze_1/{sample}.fa.gz'
+        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+    params:
+        haplotype = '0' # currently fix as haploid
+    threads: 2
+    resources:
+        mem_mb_per_cpu = 1500,
+        runtime = '1h'
     shell:
         '''
-        # we want to rename the chromosomes in panSN
-        # we also want to rename the output file to match the ID schema
-        # rename -> can we just modify ragtag based on the agp?
+        pigz -dc {input.fasta} |\
+        awk 'NR==FNR {{ if($5=="W") {{ sub("_RagTag","",$1); C[$1]++; R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"_"C[$1]-1}}; next}} ($1 in R && $1~/^>/) {{$1=R[$1]}}1' {input.agp} - |\
+        bgzip -c -@ 2 - > {output.fasta[0]}
+        samtools faidx {output.fasta[0]}
         '''
 
+# this implicitly will use the first assembly as the reference to compress against
 rule agc_create:
     input:
-        assemblies = expand(rules.panSN_renaming.output['fasta'],samples=samples)
+        assem
+        blies = expand(rules.panSN_renaming.output['fasta'],samples=samples)
     output:
         agc = 'data/freeze_1/BPC_freeze_1.agc'
     threads: 8
@@ -29,25 +39,6 @@ rule agc_create:
     shell:
         '''
         agc create -d -t {threads} {input.assemblies} > {output.agc}
-        '''
-
-rule panSN_spec:
-    input:
-        expand(rules.ragtag_scaffold.output['fasta'][0],sample=samples)
-    output:
-        multiext('pangenome/input/{chromosome}.fa.gz','','.fai','.gzi')
-    threads: 4
-    resources:
-        mem_mb = 1500,
-        walltime = '30m'
-    shell:
-        '''
-        for i in {input}
-        do
-          S=$(basename ${{i%.fasta.gz}})
-          samtools faidx --length 0 $i {wildcards.chromosome} | fastix -p "$S#0#" -
-        done | bgzip -@ {threads} -c > {output[0]}
-        samtools faidx {output[0]}
         '''
 
 rule mash_triangle:

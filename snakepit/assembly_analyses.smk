@@ -1,6 +1,7 @@
 config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
 
 import polars as pl
+from pathlib import PurePath
 
 def get_samples():
     metadata = pl.read_csv('summary.csv')#'£samplesheet_20240628.csv')
@@ -54,9 +55,9 @@ rule ragtag_scaffold:
         fasta = rules.cut_assemblies_at_gaps.output['fasta'],
         reference = lambda wildcards: config['references'][wildcards.reference]
     output:
-        #fasta = multiext('analyses/scaffolding/{sample}.{reference}.fasta.gz','','.fai','.gzi'),
-        _dir = directory('analyses/scaffolding/{reference}/{sample}')
+        multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
+        _dir = lambda wildcards, output: PurePath(output[0]).parent,
         mm2_opt = '-x asm10'
     threads: 6
     resources:
@@ -64,11 +65,7 @@ rule ragtag_scaffold:
         walltime = '2h'
     shell:
         '''
-        ragtag.py scaffold {input.reference} {input.fasta} -o {output._dir} --mm2-params "{params.mm2_opt} -t {threads}"
-
-        #sed 's/_RagTag//g' $TMPDIR/ragtag.scaffold.fasta |
-        #bgzip -@ {threads} -c > {output.fasta[0]}
-        #samtools faidx {output.fasta[0]}
+        ragtag.py scaffold {input.reference} {input.fasta} -o {params._dir} -e {input.unplaced_contigs} --mm2-params "{params.mm2_opt} -t {threads}"
         '''
 
 ## compare agp files for multiple reference choices
