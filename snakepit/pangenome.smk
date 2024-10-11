@@ -78,9 +78,9 @@ samples = pl.read_csv(config['metadata']).get_column('ID').to_list()
 # this implicitly will use the first assembly as the reference to compress against
 rule agc_create:
     input:
-        assemblies = expand(rules.panSN_renaming.output['fasta'],sample=samples)
+        assemblies = lambda wildcard: expand(rules.panSN_renaming.output['fasta'][0],samples=samples) if wildcards.archive == 'panSN' else expand('data/raw_assemblies/{sample}.fasta.gz',sample=samples)
     output:
-        agc = 'data/freeze_1/BPC_freeze_1.agc'
+        agc = 'data/freeze_1/{archive}.agc'
     threads: 8
     resources:
         mem_mb_per_cpu = 8000,
