@@ -12,7 +12,8 @@ rule cut_assemblies_at_gaps:
         runtime = '30m'
     shell:
         '''
-seqtk cutN -n 0 {input.fasta[0]} > {output}
+seqtk cutN -n 0 {input.fasta[0]} |\
+sed 's/_RagTag//' > {output}
         '''
 
 # We ideally want a reference with an X, Y, and MT so nothing goes missing...
@@ -26,16 +27,19 @@ rule ragtag_scaffold:
         _dir = lambda wildcards, output: PurePath(output[0]).parent,
         mm2_opt = '-x asm20',
         exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})"
+    conda: 'RagTag'
     threads: 6
     resources:
         mem_mb_per_cpu = 8000,
         runtime = '2h'
     shell:
         '''
+grep -vwP "{params.exclude_unplaced}" {input.reference}.fai > $TMPDIR/unplaced.txt
+
 ragtag.py scaffold {input.reference} {input.fasta} \
   -o {params._dir} \
   --mm2-params "{params.mm2_opt} -t {threads}" \
-  -e <(grep -vwP "{params.exclude_unplaced}" {input.reference}.fai )
+  -e $TMPDIR/unplaced.txt
         '''
 
 # Uses the layout defined in the BPC spreadsheet
@@ -60,8 +64,13 @@ rule panSN_renaming:
         runtime = '1h'
     shell:
         '''
-awk 'NR==FNR {{ if($5=="W") {{ sub("_RagTag","",$1); C[$1]++; R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"_"C[$1]-1}}; next}} ($1 in R && $1~/^>/) {{$1=R[$1]}}1' {input.agp} {input.fasta} |\
+awk 'NR==FNR {{ if($5=="W") {{ if ($1~/_RagTag/) {{sub("_RagTag","",$1)}} else {{$1="unplaced"}}; C[$1]++; R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"_"C[$1]-1}}; next}} ($1~/^>/) {{$1=R[$1]}}1' {input.agp} {input.fasta} |\
+seqtk seq -l 0 - |\
+paste - - |\
+sort -k1,1V |
+tr "\\t" "\\n"
 bgzip -c -@ 2 - > {output.fasta[0]}
+
 samtools faidx {output.fasta[0]}
         '''
 
