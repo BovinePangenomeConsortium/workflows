@@ -30,7 +30,7 @@ rule ragtag_scaffold:
     conda: 'RagTag'
     threads: 6
     resources:
-        mem_mb_per_cpu = 8000,
+        mem_mb_per_cpu = 12000,
         runtime = '2h'
     shell:
         '''
@@ -67,18 +67,16 @@ rule panSN_renaming:
 awk 'NR==FNR {{ if($5=="W") {{ if ($1~/_RagTag/) {{sub("_RagTag","",$1)}} else {{$1="unplaced"}}; C[$1]++; R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"_"C[$1]-1}}; next}} ($1~/^>/) {{$1=R[$1]}}1' {input.agp} {input.fasta} |\
 seqtk seq -l 0 - |\
 paste - - |\
-sort -k1,1V |
-tr "\\t" "\\n"
+sort -k1,1V |\
+tr "\\t" "\\n" |\
 bgzip -c -@ 2 - > {output.fasta[0]}
 
 samtools faidx {output.fasta[0]}
         '''
 
-samples = pl.read_csv(config['metadata']).get_column('ID').to_list()
-# this implicitly will use the first assembly as the reference to compress against
 rule agc_create:
     input:
-        assemblies = lambda wildcard: expand(rules.panSN_renaming.output['fasta'][0],samples=samples) if wildcards.archive == 'panSN' else expand('data/raw_assemblies/{sample}.fasta.gz',sample=samples)
+        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=pl.read_csv(config['metadata']).get_column('ID').to_list())
     output:
         agc = 'data/freeze_1/{archive}.agc'
     threads: 8
@@ -88,19 +86,4 @@ rule agc_create:
     shell:
         '''
 agc create -d -t {threads} {input.assemblies} > {output.agc}
-        '''
-
-#BROKEN
-rule mash_triangle:
-    input:
-        rules.panSN_renaming.output
-    output:
-        'pangenome/tree/{chromosome}.matrix'
-    threads: 4
-    resources:
-        mem_mb = 2500,
-        walltime = '1h'
-    shell:
-        '''
-        mash triangle -i -p {threads} {input[0]} > {output}
         '''
