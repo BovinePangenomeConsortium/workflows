@@ -1,12 +1,21 @@
+import polars as pl
+
+wildcard_constraints:
+    reference = '|'.join(config.get('peptides'))
+
+rule all:
+    input:
+        'analyses/pangene/ARS_UCD1.3.gfa'
+
 rule miniprot_index:
     input:
-        fasta = multiext('BPC/data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
     output:
         index = 'analyses/pangene/{sample}.mpi'
-    threads: 2
+    threads: 4
     resources:
-        mem_mb_per_cpu = 5000,
-        runtime = '1h'
+        mem_mb_per_cpu = 10000,
+        runtime = '30m'
     shell:
         '''
 miniprot -t {threads} -d {output.index} {input.fasta}
@@ -32,7 +41,7 @@ rule miniprot_align:
     threads: 8
     resources:
         mem_mb_per_cpu = 5000,
-        runtime = '4h'
+        runtime = '2h'
     shell:
         '''
 miniprot -t {threads} --outs=0.97 -I -u {input.fasta} {input.peptides} |\
@@ -41,7 +50,7 @@ pigz -p {threads} -c > {output.paf}
 
 rule pangene:
     input:
-        paf = expand(rules.miniprot.output['gff'],sample=samples)
+        paf = expand(rules.miniprot_align.output['paf'],sample=pl.read_csv(config['metadata']).get_column('ID').to_list(),allow_missing=True)
     output:
         gfa = 'analyses/pangene/{reference}.gfa'
     threads: 1
