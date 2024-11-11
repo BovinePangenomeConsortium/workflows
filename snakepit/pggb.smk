@@ -29,9 +29,8 @@ wfmash \
 -k 19 \
 -t {threads} \
 --tmp-base $TMPDIR \
---mm-index {output.index} \
-{input.fasta[0]} \
---create-index-only
+--write-index {output.index} \
+{input.fasta[0]}
         '''
 
 rule wfmash:
@@ -43,7 +42,7 @@ rule wfmash:
         paf = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.{mode}{chunk}.paf'
     params:
         block_length = lambda wildcards: int(wildcards.segment_length) * 3,
-        mapping = lambda wildcards, input: f'-i {input.mapping}' if wildcards.mode == 'alignment' else '--approx-map'
+        mapping = lambda wildcards, input: f'--align-paf {input.mapping}' if wildcards.mode == 'alignment' else '--approx-mapping'
     threads: lambda wildcards: 12 if wildcards.mode == 'mapping' else 16
     resources:
         mem_mb_per_cpu = 5000,
@@ -61,7 +60,7 @@ wfmash \
 -Y "#" \
 -t {threads} \
 --tmp-base $TMPDIR \
---mm-index {input.index} \
+--read-index {input.index} \
 {params.mapping} \
 {input.fasta[0]} \
 --skip-self \
@@ -165,7 +164,7 @@ rule smoothxg:
         POA_pad_depth = lambda wildcards, input: 100 * sum(1 for _ in open(input.fasta[1])),
         POA_lengths = '700,900,1100',
         POA_params = POA_params
-    threads: 8
+    threads: 4
     resources:
         mem_mb_per_cpu = 10000,
         runtime = '24h'
