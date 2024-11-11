@@ -47,6 +47,7 @@ def map_ID_to_filename(sample):
     filename_map = dict(pl.read_csv(config['metadata'])
                        .select(['ID','Filename'])
                        .iter_rows())
+
     return filename_map[sample]
 
 rule panSN_renaming:
@@ -86,4 +87,31 @@ rule agc_create:
     shell:
         '''
 agc create -d -t {threads} {input.assemblies} > {output.agc}
+        '''
+
+
+# something to split fasta output
+rule panSN_split:
+    input:
+        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+    output:
+        fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30)))+['X','Y','MT'])
+    shell:
+        '''
+for C in {{1..29}} X Y MT
+do
+  samtools faidx -r <(grep "#${{C}}#" {input.fasta[1]} | cut -f 1) {input.fasta[0]} > data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz
+done
+        '''
+
+rule panSN_gather:
+    input:
+        assemblies = lambda wildcards: expand('data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
+    output:
+        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi')
+    shell:
+        '''
+cat {input.assemblies} > {output.fasta[0]}
+
+samtools faidx {output.fasta[0]}
         '''

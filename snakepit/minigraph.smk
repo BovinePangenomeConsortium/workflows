@@ -1,10 +1,6 @@
 import polars as pl
 from pathlib import PurePath
 
-rule all:
-    input:
-        'analyses/minigraph/mash.txt'
-
 rule mash_sketch:
     input:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
@@ -37,24 +33,22 @@ mash dist -p {threads} {input} > {output}
 
 rule minigraph_construct:
     input:
-        assemblies = expand('data/{{chromosome}}/{sample}.fa', sample=pangenome_samples)
+        assemblies = lambda wildcards: expand('data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
     output:
         gfa = 'analyses/minigraph/{graph}/{chromosome}.basic.gfa'
     threads: 1
     resources:
         mem_mb_per_cpu = 20000,
         runtime = '24h'
-    params:
-        sample_order = lambda wildcards, input:make_minigraph_order(input.mash_distances[0],input.assemblies),
     shell:
         '''
-minigraph -t {threads} -cxggs -j 0.05 -L 30 {params.sample_order} > {output.gfa}
+minigraph -t {threads} -cxggs -j 0.05 -L 30 {input.assemblies} > {output.gfa}
         '''
 
 rule minigraph_call:
     input:
         gfa = rules.minigraph_construct.output['gfa'],
-        sample = 'assemblies/{chromosome}/{sample}.fa'
+        assembly = 'data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz'
     output:
         bed = 'analyses/minigraph/{graph}/{sample}.{chromosome}.bed'
     threads: 1
@@ -63,19 +57,18 @@ rule minigraph_call:
         runtime = '1h'
     shell:
         '''
-minigraph -t {threads} -cxasm --call -j 0.05 -L 30 {input.gfa} {input.sample} > {output.bed}
+minigraph -t {threads} -cxasm --call -j 0.05 -L 30 {input.gfa} {input.assembly} > {output.bed}
         '''
 
 localrules: minigraph_path
 rule minigraph_path:
     input:
-        paths = expand(rules.minigraph_call.output['bed'],sample=samples,allow_missing=True)
-        paths = expand('graphs/minigraph/{{chromosome}}.{sample}.bed',sample=filter(lambda x: x != get_reference_ID(), pangenome_samples)),
+        paths = lambda wildcards: expand(rules.minigraph_call.output['bed'],sample=determine_pangenome_samples(wildcards.graph),allow_missing=True),
         gfa = rules.minigraph_construct.output['gfa']
     output:
         gfa = 'analyses/minigraph/{graph}/{chromosome}.gfa'
     params:
-        samples = '\\n'.join(filter(lambda x: x != get_reference_ID(), pangenome_samples))
+        samples = '\\n'
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
