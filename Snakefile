@@ -12,9 +12,13 @@ def determine_pangenome_samples(graph):
 
     match graph:
         case 'breed_representative':
-            return metadata.filter(pl.col('Breed representative')=='Y').get_column('ID').to_list()
+            return (metadata.filter(pl.col('Species')=='Bos taurus')
+                            .filter(pl.col('Breed representative')=='Y').get_column('ID').to_list()
+                   )
         case 'subspecies_representative':
-            return metadata.filter(pl.col('Breed representative')=='Y').get_column('ID').to_list()
+            return (metadata.filter(pl.col('Species')=='Bos taurus')
+                            .filter(pl.col('Breed representative')=='Y').get_column('ID').to_list()
+                   )
         case 'all' | _:
             return metadata.get_column('ID').to_list()
 

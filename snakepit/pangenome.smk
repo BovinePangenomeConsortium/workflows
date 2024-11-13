@@ -95,12 +95,12 @@ rule panSN_split:
     input:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
     output:
-        fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30)))+['X','Y','MT'])
+        fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
     shell:
         '''
-for C in {{1..29}} X Y MT
+for C in {{1..29}}
 do
-  samtools faidx -r <(grep "#${{C}}#" {input.fasta[1]} | cut -f 1) {input.fasta[0]} > data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz
+  samtools faidx --continue --write-index -r <(grep "#${{C}}_" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
 done
         '''
 
