@@ -61,11 +61,11 @@ rule panSN_renaming:
         haplotype = '0' # currently fix as haploid
     threads: 2
     resources:
-        mem_mb_per_cpu = 1500,
+        mem_mb_per_cpu = 10000,
         runtime = '1h'
     shell:
         '''
-awk 'NR==FNR {{ if($5=="W") {{ if ($1~/_RagTag/) {{sub("_RagTag","",$1)}} else {{$1="unplaced"}}; C[$1]++; R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"_"C[$1]-1}}; next}} ($1~/^>/) {{$1=R[$1]}}1' {input.agp} {input.fasta} |\
+awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$8;C[$1]++;R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"#"C[$1]-1;}}}}else {{if ($1~/^>/) {{print R[$1];}}else {{if (V[$1]=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} {input.fasta} |\
 seqtk seq -l 0 - |\
 paste - - |\
 sort -k1,1V |\
