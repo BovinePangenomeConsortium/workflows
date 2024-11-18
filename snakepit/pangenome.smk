@@ -34,7 +34,7 @@ rule ragtag_scaffold:
         runtime = '2h'
     shell:
         '''
-grep -vwP "{params.exclude_unplaced}" {input.reference}.fai > $TMPDIR/unplaced.txt
+grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR/unplaced.txt
 
 ragtag.py scaffold {input.reference} {input.fasta} \
   -o {params._dir} \
@@ -61,12 +61,12 @@ rule panSN_renaming:
         haplotype = '0' # currently fix as haploid
     threads: 2
     resources:
-        mem_mb_per_cpu = 10000,
+        mem_mb_per_cpu = 2500,
         runtime = '1h'
     shell:
         '''
 seqtk seq -l 0 {input.fasta} |\
-awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$8;C[$1]++;R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"#"C[$1]-1;}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} }}else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
+awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/^[0-9XYM]/&&$1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$9;C[$1]++;R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"#"C[$1]-1;}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
 sort -k1,1V |\
 tr "\\t" "\\n" |\
 bgzip -c -@ 2 - > {output.fasta[0]}
@@ -81,7 +81,7 @@ rule agc_create:
         agc = 'data/freeze_1/{archive}.agc'
     threads: 8
     resources:
-        mem_mb_per_cpu = 8000,
+        mem_mb_per_cpu = 10000,
         runtime = '4h'
     shell:
         '''
@@ -95,11 +95,17 @@ rule panSN_split:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
     output:
         fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 2500,
+        runtime = '30m'
     shell:
         '''
 for C in {{1..29}}
 do
-  samtools faidx --continue --write-index -r <(grep "#${{C}}_" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
+  samtools faidx -r <(grep -P "#${{C}}#\\d+\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
+
+  samtools faidx data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz
 done
         '''
 

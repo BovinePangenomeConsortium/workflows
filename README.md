@@ -19,3 +19,9 @@ Some should be self-explanatory, but otherwise here is a short description
 
 
 ## Pangenome processing
+
+
+## Data analysis
+
+We can also estimate the average gap-compressed identity of the alignments through `cut -f 1,6,13 *.alignment.paf`
+

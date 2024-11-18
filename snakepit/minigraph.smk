@@ -60,7 +60,6 @@ rule minigraph_call:
 minigraph -t {threads} -cxasm --call -j 0.05 -L 30 {input.gfa} {input.assembly} > {output.bed}
         '''
 
-localrules: minigraph_path
 rule minigraph_path:
     input:
         paths = lambda wildcards: expand(rules.minigraph_call.output['bed'],sample=determine_pangenome_samples(wildcards.graph),allow_missing=True),
