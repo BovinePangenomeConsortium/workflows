@@ -26,7 +26,7 @@ wfmash \
 -P 50k \
 -p {wildcards.p} \
 -n 1 \
--k 19 \
+-k 15 \
 -t {threads} \
 --tmp-base $TMPDIR \
 --write-index {output.index} \
@@ -57,13 +57,11 @@ wfmash \
 -p {wildcards.p} \
 -n 1 \
 -k 15 \
--Y "#" \
 -t {threads} \
 --tmp-base $TMPDIR \
 --read-index {input.index} \
 {params.mapping} \
 {input.fasta[0]} \
---skip-self \
 --lower-triangular \
 > {output.paf}
         '''
@@ -157,7 +155,7 @@ rule smoothxg:
         fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
         gfa = rules.seqwish.output['gfa']
     output:
-        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.gfa'
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.og'
     params:
         block_id_min = lambda wildcards: round(float(wildcards.p) / 4,4),
         n_haps = lambda wildcards, input: sum(1 for _ in open(input.fasta[1])),

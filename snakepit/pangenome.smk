@@ -65,7 +65,7 @@ rule panSN_renaming:
         runtime = '1h'
     shell:
         '''
-seqtk seq -l 0 {input.fasta} |\
+seqtk seq -l 0 -U {input.fasta} |\
 awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/^[0-9XYM]/&&$1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$9;C[$1]++;R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"#"C[$1]-1;}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
 sort -k1,1V |\
 tr "\\t" "\\n" |\

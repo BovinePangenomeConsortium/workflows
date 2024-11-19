@@ -66,8 +66,6 @@ rule minigraph_path:
         gfa = rules.minigraph_construct.output['gfa']
     output:
         gfa = 'analyses/minigraph/{graph}/{chromosome}.gfa'
-    params:
-        samples = '\\n'
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
@@ -75,5 +73,5 @@ rule minigraph_path:
     shell:
         '''
 #needs special branch of mgutils.js
-{{ vg convert -r 0 -g {input.gfa} -f ; paste {input.paths} | mgutils.js path <(echo -e "{params.samples}") - | sed 's/s//g' ; }} > {output}
+{{ cat {input.gfa} ; paste {input.paths} | mgutils.js path - ; }} > {output}
         '''
