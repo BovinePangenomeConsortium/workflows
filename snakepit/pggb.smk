@@ -155,7 +155,7 @@ rule smoothxg:
         fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
         gfa = rules.seqwish.output['gfa']
     output:
-        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.og'
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.gfa'
     params:
         block_id_min = lambda wildcards: round(float(wildcards.p) / 4,4),
         n_haps = lambda wildcards, input: sum(1 for _ in open(input.fasta[1])),
@@ -164,7 +164,7 @@ rule smoothxg:
         POA_params = POA_params
     threads: 4
     resources:
-        mem_mb_per_cpu = 10000,
+        mem_mb_per_cpu = 15000,
         runtime = '24h'
     shell:
         '''
