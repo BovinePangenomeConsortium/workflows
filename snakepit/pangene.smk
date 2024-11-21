@@ -1,12 +1,3 @@
-import polars as pl
-
-wildcard_constraints:
-    reference = '|'.join(config.get('peptides'))
-
-rule all:
-    input:
-        'analyses/pangene/ARS_UCD1.3.gfa'
-
 rule miniprot_index:
     input:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
@@ -56,8 +47,30 @@ rule pangene:
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
-        runtime = '4h'
+        runtime = '1h'
     shell:
         '''
 pangene {input.paf} > {output.gfa} 
+        '''
+
+rule pangene_matrix:
+    input:
+        gfa = rules.pangene.output['gfa']
+    output:
+        tsv = 'analyses/pangene/{reference}.tsv'
+    localrule: True
+    shell:
+        '''
+pangene.js gfa2matrix {input.gfa} > {output.tsv}
+        '''
+
+rule pangene_call:
+    input:
+        gfa = rules.pangene.output['gfa']
+    output:
+        'analyses/pangene/{reference}.call'
+    localrule: True
+    shell:
+        '''
+pangene.js call -p -s {input.gfa} > {output}
         '''
