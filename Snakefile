@@ -3,9 +3,11 @@ import polars as pl
 include: 'snakepit/pangenome.smk'
 include: 'snakepit/minigraph.smk'
 include: 'snakepit/pggb.smk'
+include: 'snakepit/pangene.smk'
 
 wildcard_constraints:
-    graph = r'all|subspecies_representative|breed_representative'
+    graph = r'all|subspecies_representative|breed_representative',
+    reference = '|'.join(config.get('peptides'))
 
 def determine_pangenome_samples(graph):
     metadata = pl.read_csv(config['metadata'])

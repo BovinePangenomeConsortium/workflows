@@ -35,14 +35,14 @@ rule minigraph_construct:
     input:
         assemblies = lambda wildcards: expand('data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
     output:
-        gfa = 'analyses/minigraph/{graph}/{chromosome}.basic.gfa'
+        gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.basic.gfa'
     threads: 1
     resources:
         mem_mb_per_cpu = 20000,
         runtime = '24h'
     shell:
         '''
-minigraph -t {threads} -cxggs -j 0.05 -L 30 {input.assemblies} > {output.gfa}
+minigraph -t {threads} -cxggs -j 0.05 -L {wildcards.L} {input.assemblies} > {output.gfa}
         '''
 
 rule minigraph_call:
@@ -50,14 +50,14 @@ rule minigraph_call:
         gfa = rules.minigraph_construct.output['gfa'],
         assembly = 'data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz'
     output:
-        bed = 'analyses/minigraph/{graph}/{sample}.{chromosome}.bed'
+        bed = 'analyses/minigraph/{graph}/L{L}/{sample}.{chromosome}.bed'
     threads: 1
     resources:
         mem_mb_per_cpu = 10000,
         runtime = '1h'
     shell:
         '''
-minigraph -t {threads} -cxasm --call -j 0.05 -L 30 {input.gfa} {input.assembly} > {output.bed}
+minigraph -t {threads} -cxasm --call -j 0.05 -L {wildcards.L} {input.gfa} {input.assembly} > {output.bed}
         '''
 
 rule minigraph_path:
@@ -65,7 +65,7 @@ rule minigraph_path:
         paths = lambda wildcards: expand(rules.minigraph_call.output['bed'],sample=determine_pangenome_samples(wildcards.graph),allow_missing=True),
         gfa = rules.minigraph_construct.output['gfa']
     output:
-        gfa = 'analyses/minigraph/{graph}/{chromosome}.gfa'
+        gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.gfa'
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,

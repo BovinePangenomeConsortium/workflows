@@ -61,7 +61,7 @@ rule pangene_matrix:
     localrule: True
     shell:
         '''
-pangene.js gfa2matrix {input.gfa} > {output.tsv}
+pangene.js gfa2matrix -c {input.gfa} > {output.tsv}
         '''
 
 rule pangene_call:
