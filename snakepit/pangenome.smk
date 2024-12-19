@@ -19,14 +19,15 @@ sed 's/_RagTag//' > {output}
 # We ideally want a reference with an X, Y, and MT so nothing goes missing...
 rule ragtag_scaffold:
     input:
-        fasta = rules.cut_assemblies_at_gaps.output['fasta'],
+        fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi') if wildcards.sample in references else rules.cut_assemblies_at_gaps.output['fasta'] ,
         reference = lambda wildcards: config['references'][wildcards.reference]
     output:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
         _dir = lambda wildcards, output: PurePath(output[0]).parent,
         mm2_opt = '-x asm20',
-        exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})"
+        exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})",
+        remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in references else ''
     conda: 'RagTag'
     threads: 6
     resources:
@@ -39,7 +40,7 @@ grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR
 ragtag.py scaffold {input.reference} {input.fasta} \
   -o {params._dir} \
   --mm2-params "{params.mm2_opt} -t {threads}" \
-  -e $TMPDIR/unplaced.txt
+  -e $TMPDIR/unplaced.txt {params.remove_small}
         '''
 
 # Uses the layout defined in the BPC spreadsheet
@@ -88,8 +89,7 @@ rule agc_create:
 agc create -d -t {threads} {input.assemblies} > {output.agc}
         '''
 
-
-# something to split fasta output
+# TODO: Will this break for references now?
 rule panSN_split:
     input:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
@@ -103,9 +103,7 @@ rule panSN_split:
         '''
 for C in {{1..29}}
 do
-  samtools faidx -r <(grep -P "#${{C}}#\\d+\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
-
-  samtools faidx data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz
+  samtools faidx  --write-index-r <(grep -P "#${{C}}#\\d+\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
 done
         '''
 
