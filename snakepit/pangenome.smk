@@ -1,6 +1,7 @@
 import polars as pl
 from pathlib import PurePath
 
+
 rule cut_assemblies_at_gaps:
     input:
         fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
@@ -19,7 +20,7 @@ sed 's/_RagTag//' > {output}
 # We ideally want a reference with an X, Y, and MT so nothing goes missing...
 rule ragtag_scaffold:
     input:
-        fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi') if wildcards.sample in references else rules.cut_assemblies_at_gaps.output['fasta'] ,
+        fasta = lambda wildcards: 'data/raw_assemblies/{sample}.fasta.gz' if wildcards.sample in ANNOTATED_GENOMES else rules.cut_assemblies_at_gaps.output['fasta'] ,
         reference = lambda wildcards: config['references'][wildcards.reference]
     output:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
@@ -27,7 +28,7 @@ rule ragtag_scaffold:
         _dir = lambda wildcards, output: PurePath(output[0]).parent,
         mm2_opt = '-x asm20',
         exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})",
-        remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in references else ''
+        remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in ANNOTATED_GENOMES else ''
     conda: 'RagTag'
     threads: 6
     resources:
@@ -51,15 +52,22 @@ def map_ID_to_filename(sample):
 
     return filename_map[sample]
 
+def panSN_naming_schema(sample):
+    haplotype = metadata.filter(pl.col('Filename')==sample).get_column('Haplotype').to_list()[0]
+    naming = f'">{sample}#{haplotype}#"$1'
+    if sample not in ANNOTATED_GENOMES:
+        naming += '"#"C[$1]-1'
+    return naming
+
+#TODO: reference-annotated "unplaced" is overwritten each time, so is not valid
 rule panSN_renaming:
     input:
-        metadata = config['metadata'],
-        fasta = lambda wildcards: expand(rules.cut_assemblies_at_gaps.output['fasta'],sample=map_ID_to_filename(wildcards.sample)),
-        agp = lambda wildcards: expand(rules.ragtag_scaffold.output[0],sample=map_ID_to_filename(wildcards.sample),reference='ARS_UCD2.0')
+        fasta = rules.ragtag_scaffold.input['fasta'],
+        agp = expand(rules.ragtag_scaffold.output[0],reference='ARS_UCD2.0',allow_missing=True)
     output:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
     params:
-        haplotype = '0' # currently fix as haploid
+        naming_schema = lambda wildcards: panSN_naming_schema(wildcards.sample)
     threads: 2
     resources:
         mem_mb_per_cpu = 2500,
@@ -67,7 +75,7 @@ rule panSN_renaming:
     shell:
         '''
 seqtk seq -l 0 -U {input.fasta} |\
-awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/^[0-9XYM]/&&$1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$9;C[$1]++;R[">"$6]=">{wildcards.sample}#{params.haplotype}#"$1"#"C[$1]-1;}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
+awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/^[0-9XYM]/&&$1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced";}}V[">"$6]=$9;C[$1]++;R[">"$6]={params.naming_schema};}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
 sort -k1,1V |\
 tr "\\t" "\\n" |\
 bgzip -c -@ 2 - > {output.fasta[0]}
@@ -77,7 +85,7 @@ samtools faidx {output.fasta[0]}
 
 rule agc_create:
     input:
-        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=pl.read_csv(config['metadata']).get_column('ID').to_list())
+        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=determine_pangenome_samples())
     output:
         agc = 'data/freeze_1/{archive}.agc'
     threads: 8

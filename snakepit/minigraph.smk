@@ -11,7 +11,7 @@ rule mash_sketch:
     threads: 2
     resources:
         mem_per_cpu_mb = 2500,
-        walltime = '1h'
+        runtime = '1h'
     shell:
         '''
 mash sketch -p {threads} -o {params.prefix} {input.fasta[0]}
@@ -19,13 +19,13 @@ mash sketch -p {threads} -o {params.prefix} {input.fasta[0]}
 
 rule mash_dist:
     input:
-        expand(rules.mash_sketch.output['sketch'],sample=pl.read_csv(config['metadata']).get_column('ID').to_list())
+        expand(rules.mash_sketch.output['sketch'],sample=pl.read_csv(config['metadata']).get_column('Filename').to_list())
     output:
         'analyses/minigraph/mash.txt'
     threads: 4
     resources:
         mem_per_cpu_mb = 2500,
-        walltime = '1h'
+        runtime = '1h'
     shell:
         '''
 mash dist -p {threads} {input} > {output}
@@ -38,7 +38,7 @@ rule minigraph_construct:
         gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.basic.gfa'
     threads: 1
     resources:
-        mem_mb_per_cpu = 20000,
+        mem_mb_per_cpu_per_cpu = 20000,
         runtime = '24h'
     shell:
         '''
@@ -53,7 +53,7 @@ rule minigraph_call:
         bed = 'analyses/minigraph/{graph}/L{L}/{sample}.{chromosome}.bed'
     threads: 1
     resources:
-        mem_mb_per_cpu = 10000,
+        mem_mb_per_cpu_per_cpu = 10000,
         runtime = '1h'
     shell:
         '''
@@ -68,7 +68,7 @@ rule minigraph_path:
         gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.gfa'
     threads: 1
     resources:
-        mem_mb_per_cpu = 5000,
+        mem_mb_per_cpu_per_cpu = 5000,
         runtime = '1h'
     shell:
         '''

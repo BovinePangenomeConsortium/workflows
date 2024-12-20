@@ -41,7 +41,7 @@ pigz -p {threads} -c > {output.paf}
 
 rule pangene:
     input:
-        paf = expand(rules.miniprot_align.output['paf'],sample=pl.read_csv(config['metadata']).get_column('ID').to_list(),allow_missing=True)
+        paf = expand(rules.miniprot_align.output['paf'],sample=pl.read_csv(config['metadata']).get_column('Filename').to_list(),allow_missing=True)
     output:
         gfa = 'analyses/pangene/{reference}.gfa'
     threads: 1

@@ -43,8 +43,8 @@ rule cut_assemblies_at_gaps:
         fasta = 'data/contigs/{sample}.fa'
     threads: 1
     resources:
-        mem_mb = 2500,
-        walltime = '30m'
+        mem_mb_per_cpu = 2500,
+        runtime = '30m'
     shell:
         '''
         seqtk cutN -n 0 {input.fasta[0]} > {output}
@@ -61,8 +61,8 @@ rule ragtag_scaffold:
         mm2_opt = '-x asm10'
     threads: 6
     resources:
-        mem_mb = 8000,
-        walltime = '2h'
+        mem_mb_per_cpu = 8000,
+        runtime = '2h'
     shell:
         '''
         ragtag.py scaffold {input.reference} {input.fasta} -o {params._dir} -e {input.unplaced_contigs} --mm2-params "{params.mm2_opt} -t {threads}"

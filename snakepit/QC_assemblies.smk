@@ -1,13 +1,13 @@
 from pathlib import PurePath
+import polars as pl
 
+def get_samples():
+    return (pl.read_csv(config['metadata'])
+              .get_column('Filename')
+              .to_list()
+           )
 
-samples = glob_wildcards('data/raw_assemblies/{sample}.fasta.gz').sample
-config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
-config['busco_map'] = 'busco_map.tsv'
-
-rule all:
-    input:
-        'summary.csv'
+samples = get_samples()
 
 #many assemblies are gzipped, but we want bgzipped for better random access
 rule rebgzip_assemblies:
@@ -17,13 +17,14 @@ rule rebgzip_assemblies:
         multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
     threads: 4
     resources:
-        mem_mb = 2000,
-        walltime = '1h'
+        mem_mb_per_cpu = 2000,
+        runtime = '1h'
     shell:
         '''
-        pigz -dc -p 4 {input} |\
-        bgzip -@ 4 -c > {output[0]}
-        samtools index -@ 4 {output[0]}
+pigz -dc -p 4 {input} |\
+bgzip -@ 4 -c > {output[0]}
+
+samtools index -@ 4 {output[0]}
         '''
 
 rule calculate_N50:
@@ -32,10 +33,11 @@ rule calculate_N50:
     output:
         'analyses/freeze_1/QC/contiguity/{sample}.N50'
     resources:
-        walltime = '10m'
+        runtime = '10m'
     shell:
         '''
-        seqtk cutN -n 0 {input.fasta[0]} | calN50.js -L 3G - > {output}
+seqtk cutN -n 0 {input.fasta[0]} |\
+calN50.js -L 3G - > {output}
         '''
 
 rule calculate_gene_completeness:
@@ -45,31 +47,34 @@ rule calculate_gene_completeness:
         metrics = expand('analyses/freeze_1/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
     params:
         _dir = lambda wildcards, output: PurePath(output['metrics'][0]).parent
+    conda: 'compleasm'
     threads: 4
     resources:
-        mem_mb = 12500,
-        walltime = '2h'
+        mem_mb_per_cpu = 12500,
+        runtime = '2h'
     shell:
         '''
-        compleasm run -a {input.fasta[0]} -o {params._dir} -l cetartiodactyla -t {threads}
-        cut -f 3,2,1,11,9 {params._dir}/cetartiodactyla_odb10/full_table.tsv | sed '1d' > {output.metrics[1]}
-        rm -rf {params._dir}/cetartiodactyla_odb10
+compleasm run -a {input.fasta[0]} -o {params._dir} -l cetartiodactyla -t {threads}
+
+cut -f 3,2,1,11,9 {params._dir}/cetartiodactyla_odb10/full_table.tsv | sed '1d' > {output.metrics[1]}
+
+rm -rf {params._dir}/cetartiodactyla_odb10
         '''
 
 rule minimap2_reference_aligned:
     input:
-        asta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi'),
+        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi'),
         reference = config['reference']
     output:
         'analyses/freeze_1/QC/reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
     threads: 4
     resources:
-        mem_mb = 10000,
-        walltime = '2h'
+        mem_mb_per_cpu = 10000,
+        runtime = '2h'
     shell:
         '''
-        minimap2 -t {threads} --cs -cxasm10 {input.reference} {input.fasta[0]} |\
-        pigz -p {threads} -c > {output}
+minimap2 -t {threads} --cs -cxasm10 {input.reference} {input.fasta[0]} |\
+pigz -p {threads} -c > {output}
         '''
 
 rule calculate_variant_level:
@@ -80,14 +85,14 @@ rule calculate_variant_level:
         vcf = multiext('analyses/freeze_1/QC/reference_alignment/{sample}.vcf.gz','','.csi')
     threads: 1
     resources:
-        mem_mb = 5000,
-        walltime = '1h'
+        mem_mb_per_cpu = 5000,
+        runtime = '1h'
     shell:
         '''
-        pigz -p 2 -dc {input.paf} |\
-        sort -k6,6 -k8,8n |\
-        paftools.js call -f {input.reference} -s {wildcards.sample} - |\
-        bcftools view --write-index -o {output.vcf[0]}
+pigz -p 2 -dc {input.paf} |\
+sort -k6,6 -k8,8n |\
+paftools.js call -f {input.reference} -s {wildcards.sample} - |\
+bcftools view --write-index -o {output.vcf[0]}
         '''
 
 rule calculate_reference_coverage:
@@ -98,17 +103,17 @@ rule calculate_reference_coverage:
         bed = 'analyses/freeze_1/QC/reference_alignment/{sample}.covered.bed'
     threads: 1
     resources:
-        mem_mb = 2500,
-        walltime = '30m'
+        mem_mb_per_cpu = 2500,
+        runtime = '30m'
     shell:
         '''
-        pigz -p 2 -dc {input.paf} |\
-        cut -f 6,8,9 |\
-        bedtools sort -faidx {input.fai} -i /dev/stdin |\
-        bedtools merge -d 0 -i /dev/stdin |\
-        bedtools genomecov -g {input.fai} -i /dev/stdin |\
-        awk -v OFS='\\t' '$2==0 {{A[$1]; U[$1]=$5; next}} {{A[$1];C[$1]=$5}} END {{for (k in C) {{print k,C[k]?C[k]:0,U[k]?U[k]:0}} }}' |\
-        sort -k1,1V > {output.bed}
+pigz -p 2 -dc {input.paf} |\
+cut -f 6,8,9 |\
+bedtools sort -faidx {input.fai} -i /dev/stdin |\
+bedtools merge -d 0 -i /dev/stdin |\
+bedtools genomecov -g {input.fai} -i /dev/stdin |\
+awk -v OFS='\\t' '$2==0 {{A[$1]; U[$1]=$5; next}} {{A[$1];C[$1]=$5}} END {{for (k in C) {{print k,C[k]?C[k]:0,U[k]?U[k]:0}} }}' |\
+sort -k1,1V > {output.bed}
         '''
 
 rule summarise_sample_metrics:
@@ -122,19 +127,20 @@ rule summarise_sample_metrics:
         csv = 'analyses/freeze_1/QC/summary/{sample}.csv',
         busco = 'analyses/freeze_1/QC/completeness/{sample}.csv'
     resources:
-        walltime = '10m'
+        runtime = '10m'
     shell:
         '''
-        echo -n "{wildcards.sample}," > {output.csv}
-        awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50} >> {output.csv}
+echo -n "{wildcards.sample}," > {output.csv}
 
-        awk 'NR==FNR {{loc[$1]=$2;next}} {{++C[loc[$1]][$2]}} END {{ for (k in C) {{ print k,C[k]["Single"]?C[k]["Single"]:0,C[k]["Duplicated"]?C[k]["Duplicated"]:0,C[k]["Missing"]?C[k]["Missing"]:0 }} }}' {input.busco_map} {input.completeness[1]} > {output.busco}
-    
-        awk '$1~/[[:digit:]]/ {{s+=$2;d+=$3;m+=$4;next}} {{S[$1]=$2;D[$1]=$3;M[$1]=$4}} END {{printf s","d","m","S["X"]","D["X"]","M["X"]","S["Y"]","D["Y"]","M["Y"]","}}' {output.busco} >> {output.csv}
+awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50} >> {output.csv}
 
-        bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output.csv}
+awk 'NR==FNR {{loc[$1]=$2;next}} {{++C[loc[$1]][$2]}} END {{ for (k in C) {{ print k,C[k]["Single"]?C[k]["Single"]:0,C[k]["Duplicated"]?C[k]["Duplicated"]:0,C[k]["Missing"]?C[k]["Missing"]:0 }} }}' {input.busco_map} {input.completeness[1]} > {output.busco}
 
-        awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
+awk '$1~/[[:digit:]]/ {{s+=$2;d+=$3;m+=$4;next}} {{S[$1]=$2;D[$1]=$3;M[$1]=$4}} END {{printf s","d","m","S["X"]","D["X"]","M["X"]","S["Y"]","D["Y"]","M["Y"]","}}' {output.busco} >> {output.csv}
+
+bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output.csv}
+
+awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
         '''
 
 rule summarise_all_metrics:
@@ -147,7 +153,7 @@ rule summarise_all_metrics:
     localrule: True
     shell:
         '''
-        {{ echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
+{{ echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
 
-        bcftools merge --threads 2 -W {input.vcf} -o {output.vcf} {input.vcf}
+bcftools merge --threads 2 -W -o {output.vcf[0]} {input.vcf}
         '''
