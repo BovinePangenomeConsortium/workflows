@@ -7,6 +7,7 @@ include: 'snakepit/pggb.smk'
 include: 'snakepit/pangene.smk'
 
 wildcard_constraints:
+    sample = r'[\w+\.\-_]+',
     graph = r'all|subspecies_representative|breed_representative',
     #reference = '|'.join(config.get('peptides'))
 

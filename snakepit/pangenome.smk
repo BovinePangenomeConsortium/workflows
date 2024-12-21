@@ -97,12 +97,13 @@ rule agc_create:
 agc create -d -t {threads} {input.assemblies} > {output.agc}
         '''
 
-# TODO: Will this break for references now?
 rule panSN_split:
     input:
         fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
     output:
         fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
+    params:
+        regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d'
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,
@@ -111,7 +112,7 @@ rule panSN_split:
         '''
 for C in {{1..29}}
 do
-  samtools faidx  --write-index-r <(grep -P "#${{C}}#\\d+\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.${{C}}.fa.gz --length 0 {input.fasta[0]}
+  samtools faidx  --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.$C.fa.gz --length 0 {input.fasta[0]}
 done
         '''
 
