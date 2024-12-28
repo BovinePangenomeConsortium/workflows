@@ -143,17 +143,17 @@ bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf 
 awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/n,B["X"]?B["X"]:0,B["Y"]?B["Y"]:0,B["MT"]?B["MT"]:0}}' {input.bed} >> {output.csv}
         '''
 
+#bcftools merge --threads 2 -W -o {output.vcf[0]} {input.vcf}
+#bcftools stats -r $(echo {1..29} | tr ' ' ',') -s - 67_samples.vcf.gz | grep "PSC"
 rule summarise_all_metrics:
     input:
         metrics = expand(rules.summarise_sample_metrics.output['csv'],sample=samples),
         vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=samples)
     output:
         metrics = 'analyses/freeze_1/QC_summary.csv',
-        vcf = multiext('analyses/freeze_1/QC_variants.vcf.gz','','.csi')
+        #vcf = multiext('analyses/freeze_1/QC_variants.vcf.gz','','.csi')
     localrule: True
     shell:
         '''
 {{ echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
-
-bcftools merge --threads 2 -W -o {output.vcf[0]} {input.vcf}
         '''
