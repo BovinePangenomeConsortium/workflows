@@ -15,8 +15,8 @@ rule wfmash_index:
         block_length = lambda wildcards: int(wildcards.segment_length) * 3
     threads: 4
     resources:
-        mem_mb_per_cpu = 8000,
-        runtime = '1h'
+        mem_mb_per_cpu = 30000,
+        runtime = '4h'
     shell:
         '''
 wfmash \
@@ -33,6 +33,7 @@ wfmash \
 {input.fasta[0]}
         '''
 
+#TODO: alignment is lower memory compared to mapping
 rule wfmash:
     input:
         fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
@@ -45,8 +46,8 @@ rule wfmash:
         mapping = lambda wildcards, input: f'--align-paf {input.mapping}' if wildcards.mode == 'alignment' else '--approx-mapping'
     threads: lambda wildcards: 12 if wildcards.mode == 'mapping' else 16
     resources:
-        mem_mb_per_cpu = 5000,
-        runtime = '4h'
+        mem_mb_per_cpu = 8000,
+        runtime = '24h'
     shell:
         '''
 wfmash \
@@ -157,14 +158,14 @@ rule smoothxg:
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.gfa'
     params:
-        block_id_min = lambda wildcards: round(float(wildcards.p) / 4,4),
+        block_id_min = lambda wildcards: round(float(wildcards.p) / 100,4),
         n_haps = lambda wildcards, input: sum(1 for _ in open(input.fasta[1])),
         POA_pad_depth = lambda wildcards, input: 100 * sum(1 for _ in open(input.fasta[1])),
         POA_lengths = '700,900,1100',
         POA_params = POA_params
-    threads: 4
+    threads: 12
     resources:
-        mem_mb_per_cpu = 15000,
+        mem_mb_per_cpu = 20000,
         runtime = '24h'
     shell:
         '''
@@ -176,11 +177,11 @@ smoothxg \
 --base $TMPDIR \
 --chop-to 100 \
 -I {params.block_id_min} \
--R 0 \
+-R 0.3 \
 -j 0 \
 -e 0 \
 -l {params.POA_lengths} \
--P {params.POA_params} \
+-p {params.POA_params} \
 -O 0.001 \
 -Y {params.POA_pad_depth} \
 -d 0 -D 0 \
