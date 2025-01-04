@@ -165,8 +165,8 @@ rule smoothxg:
         POA_params = POA_params
     threads: 12
     resources:
-        mem_mb_per_cpu = 20000,
-        runtime = '24h'
+        mem_mb_per_cpu = 25000,
+        runtime = '72h'
     shell:
         '''
 smoothxg \
@@ -197,8 +197,8 @@ rule gffafix:
         affixes = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.gffafix.affixes.tsv.gz'
     threads: 1
     resources:
-        mem_mb_per_cpu = 15000,
-        runtime = '4h'
+        mem_mb_per_cpu = 45000,
+        runtime = '24h'
     shell:
         '''
         gfaffix {input.gfa} -o {output.gfa} |\
@@ -235,7 +235,7 @@ rule odgi_unchop:
     threads: 6
     resources:
         mem_mb_per_cpu = 8000,
-        runtime = '4h'
+        runtime = '24h'
     shell:
         '''
 odgi build -t {threads} -P -g {input.gfa} -o - -O |\
@@ -252,8 +252,8 @@ rule odgi_layout:
         layout = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.lay','','.tsv')
     threads: 6
     resources:
-        mem_mb_per_cpu = 8000,
-        runtime = '4h'
+        mem_mb_per_cpu = 10000,
+        runtime = '24h'
     shell:
         '''
 odgi layout \
@@ -273,7 +273,7 @@ rule odgi_draw:
         draw_paths = lambda wildcards: '-C -w 20' if wildcards.draw == 'path' else ''
     threads: 2
     resources:
-        mem_mb_per_cpu = 5000,
+        mem_mb_per_cpu = 15000,
         runtime = '4h'
     shell:
         '''
