@@ -54,7 +54,8 @@ def map_ID_to_filename(sample):
 
 def panSN_naming_schema(sample):
     haplotype = metadata.filter(pl.col('Filename')==sample).get_column('Haplotype').to_list()[0]
-    naming = f'">{sample}#{haplotype}#"$1'
+    animal_ID = metadata.filter(pl.col('Filename')==sample).get_column('Animal ID').to_list()[0]
+    naming = f'">{animal_ID}#{haplotype}#"$1'
     if sample not in ANNOTATED_GENOMES:
         naming += '"#"C[$1]-1'
     return naming
