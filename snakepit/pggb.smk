@@ -15,7 +15,7 @@ rule wfmash_index:
         block_length = lambda wildcards: int(wildcards.segment_length) * 3
     threads: 4
     resources:
-        mem_mb_per_cpu = 30000,
+        mem_mb_per_cpu = 40000,
         runtime = '4h'
     shell:
         '''
@@ -193,16 +193,14 @@ rule gffafix:
     input:
         gfa = rules.smoothxg.output['gfa']
     output:
-        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.gffafix.gfa',
-        affixes = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.gffafix.affixes.tsv.gz'
-    threads: 1
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.gffafix.gfa'
+    threads: 6
     resources:
-        mem_mb_per_cpu = 45000,
-        runtime = '24h'
+        mem_mb_per_cpu = 7000,
+        runtime = '4h'
     shell:
         '''
-        gfaffix {input.gfa} -o {output.gfa} |\
-        pigz -p 2 -c > {output.affixes}
+        gfaffix {input.gfa} -o {output.gfa} --threads {threads}
         '''
 
 rule vg_path_normalise:
