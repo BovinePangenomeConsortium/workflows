@@ -1,5 +1,3 @@
-
-
 ruleorder: split_approx_mappings_in_chunks > wfmash
 
 wildcard_constraints:
@@ -8,7 +6,7 @@ wildcard_constraints:
 
 rule wfmash_index:
     input:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi')
+        fasta = rules.panSN_gather.output['fasta']
     output:
         index = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.index.mm3'
     params:
@@ -36,7 +34,7 @@ wfmash \
 #TODO: alignment is lower memory compared to mapping
 rule wfmash:
     input:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
+        fasta = rules.panSN_gather.output['fasta'],
         index = rules.wfmash_index.output['index'],
         mapping = lambda wildcards: 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.mapping{chunk}.paf' if wildcards.mode == 'alignment' else []
     output:
@@ -119,7 +117,7 @@ cat {input} > {output}
 
 rule seqwish:
     input:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
+        fasta = rules.panSN_gather.output['fasta'],
         alignment = expand(rules.wfmash_concat.output['paf'],allow_missing=True) if config.get('wfmash_chunks',1) > 1 else expand(rules.wfmash.output['paf'],mode='alignment',chunk='',allow_missing=True)
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.seqwish.gfa'
@@ -153,7 +151,7 @@ def POA_params(wildcards):
 
 rule smoothxg:
     input:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
+        fasta = rules.panSN_gather.output['fasta'],
         gfa = rules.seqwish.output['gfa']
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.smoothxg.gfa'
@@ -205,15 +203,15 @@ rule gffafix:
 
 rule vg_path_normalise:
     input:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi'),
-        gfa = rules.gffafix.output['gfa']
+        fasta = rules.panSN_gather.output['fasta'],
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.gfa' #rules.gffafix.output['gfa']
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.vg.gfa'
     params:
         reference = lambda wildcards, input: open(input.fasta[1]).readline().rstrip().split('\t')[0]
-    threads: 1
+    threads: 4
     resources:
-        mem_mb_per_cpu = 2500,
+        mem_mb_per_cpu = 20000,
         runtime = '24h'
     shell:
         '''

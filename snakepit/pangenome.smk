@@ -1,7 +1,3 @@
-import polars as pl
-from pathlib import PurePath
-
-
 rule cut_assemblies_at_gaps:
     input:
         fasta = multiext('data/raw_assemblies/{sample}.fasta.gz','','.fai','.gzi')
@@ -66,7 +62,7 @@ rule panSN_renaming:
         fasta = rules.ragtag_scaffold.input['fasta'],
         agp = expand(rules.ragtag_scaffold.output[0],reference='ARS_UCD2.0',allow_missing=True)
     output:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = multiext('data/currated_assemblies/{sample}.fa.gz','','.fai','.gzi')
     params:
         naming_schema = lambda wildcards: panSN_naming_schema(wildcards.sample)
     threads: 2
@@ -86,9 +82,10 @@ samtools faidx {output.fasta[0]}
 
 rule agc_create:
     input:
-        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=determine_pangenome_samples())
+        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0],sample=determine_pangenome_samples(wildcards.archive))
+        #assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=determine_pangenome_samples())
     output:
-        agc = 'data/freeze_1/{archive}.agc'
+        agc = 'data/{archive}.agc'
     threads: 8
     resources:
         mem_mb_per_cpu = 10000,
@@ -100,11 +97,12 @@ agc create -d -t {threads} {input.assemblies} > {output.agc}
 
 rule panSN_split:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = multiext('data/currated_assemblies/{sample}.fa.gz','','.fai','.gzi')
     output:
-        fasta = expand('data/freeze_1/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
+        fasta = expand('data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
     params:
-        regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d'
+        regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d',
+        _out = lambda wildcards, output: PurePath(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,
@@ -113,15 +111,15 @@ rule panSN_split:
         '''
 for C in {{1..29}}
 do
-  samtools faidx  --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o data/freeze_1/chromosomes/{wildcards.sample}.$C.fa.gz --length 0 {input.fasta[0]}
+  samtools faidx  --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
 done
         '''
 
 rule panSN_gather:
     input:
-        assemblies = lambda wildcards: expand('data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
+        assemblies = lambda wildcards: expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
     output:
-        fasta = multiext('data/freeze_1/{graph}/{chromosome}.fa.gz','','.fai','.gzi')
+        fasta = multiext('data/currated_assemblies/{graph}/{chromosome}.fa.gz','','.fai','.gzi')
     shell:
         '''
 cat {input.assemblies} > {output.fasta[0]}

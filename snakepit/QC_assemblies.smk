@@ -1,14 +1,3 @@
-from pathlib import PurePath
-import polars as pl
-
-def get_samples():
-    return (pl.read_csv(config['metadata'])
-              .get_column('Filename')
-              .to_list()
-           )
-
-samples = get_samples()
-
 #many assemblies are gzipped, but we want bgzipped for better random access
 rule rebgzip_assemblies:
     input:
@@ -29,9 +18,9 @@ samtools index -@ 4 {output[0]}
 
 rule calculate_N50:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = rules.panSN_renaming.output['fasta']
     output:
-        'analyses/freeze_1/QC/contiguity/{sample}.N50'
+        'analyses/QC/contiguity/{sample}.N50'
     resources:
         runtime = '10m'
     shell:
@@ -42,9 +31,9 @@ calN50.js -L 3G - > {output}
 
 rule calculate_gene_completeness:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = rules.panSN_renaming.output['fasta']
     output:
-        metrics = expand('analyses/freeze_1/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
+        metrics = expand('analyses/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
     params:
         _dir = lambda wildcards, output: PurePath(output['metrics'][0]).parent
     conda: 'compleasm'
@@ -63,10 +52,10 @@ rm -rf {params._dir}/cetartiodactyla_odb10
 
 rule minimap2_reference_aligned:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi'),
+        fasta = rules.panSN_renaming.output['fasta'],
         reference = config['reference']
     output:
-        'analyses/freeze_1/QC/reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
+        'analyses/QC/reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
     threads: 4
     resources:
         mem_mb_per_cpu = 10000,
@@ -82,7 +71,7 @@ rule calculate_variant_level:
         paf = rules.minimap2_reference_aligned.output,
         reference = config['reference']
     output:
-        vcf = multiext('analyses/freeze_1/QC/reference_alignment/{sample}.vcf.gz','','.csi')
+        vcf = multiext('analyses/QC/reference_alignment/{sample}.vcf.gz','','.csi')
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
@@ -100,7 +89,7 @@ rule calculate_reference_coverage:
         paf = rules.minimap2_reference_aligned.output,
         fai = config['reference'] + ".fai"
     output:
-        bed = 'analyses/freeze_1/QC/reference_alignment/{sample}.covered.bed'
+        bed = 'analyses/QC/reference_alignment/{sample}.covered.bed'
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,
@@ -124,8 +113,8 @@ rule summarise_sample_metrics:
         bed = rules.calculate_reference_coverage.output['bed'],
         busco_map = config['busco_map']
     output:
-        csv = 'analyses/freeze_1/QC/summary/{sample}.csv',
-        busco = 'analyses/freeze_1/QC/completeness/{sample}.csv'
+        csv = 'analyses/QC/summary/{sample}.csv',
+        busco = 'analyses/QC/completeness/{sample}.csv'
     resources:
         runtime = '10m'
     shell:
@@ -147,11 +136,11 @@ awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/
 #bcftools stats -r $(echo {1..29} | tr ' ' ',') -s - 67_samples.vcf.gz | grep "PSC"
 rule summarise_all_metrics:
     input:
-        metrics = expand(rules.summarise_sample_metrics.output['csv'],sample=samples),
-        vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=samples)
+        metrics = lambda wildcards: expand(rules.summarise_sample_metrics.output['csv'],sample=determine_pangenome_samples(wildcards.graph)),
+        vcf = lambda wildcards: expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples(wildcards.graph))
     output:
-        metrics = 'analyses/freeze_1/QC_summary.csv',
-        #vcf = multiext('analyses/freeze_1/QC_variants.vcf.gz','','.csi')
+        metrics = 'analyses/QC_summary.{graph}.csv',
+        #vcf = multiext('analyses/QC_variants.vcf.gz','','.csi')
     localrule: True
     shell:
         '''

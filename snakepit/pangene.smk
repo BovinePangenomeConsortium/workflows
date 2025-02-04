@@ -1,6 +1,6 @@
 rule miniprot_index:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = rules.panSN_renaming.output['fasta']
     output:
         index = 'analyses/pangene/{sample}.mpi'
     threads: 4
@@ -41,9 +41,9 @@ pigz -p {threads} -c > {output.paf}
 
 rule pangene:
     input:
-        paf = expand(rules.miniprot_align.output['paf'],sample=pl.read_csv(config['metadata']).get_column('Filename').to_list(),allow_missing=True)
+        paf = lambda wildcards: expand(rules.miniprot_align.output['paf'],sample=determine_pangenome_samples(wildcards.graph))
     output:
-        gfa = 'analyses/pangene/{reference}.gfa'
+        gfa = 'analyses/pangene/{graph}.{reference}.gfa'
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
@@ -57,7 +57,7 @@ rule pangene_matrix:
     input:
         gfa = rules.pangene.output['gfa']
     output:
-        tsv = 'analyses/pangene/{reference}.tsv'
+        tsv = 'analyses/pangene/{graph}.{reference}.tsv'
     localrule: True
     shell:
         '''
@@ -68,7 +68,7 @@ rule pangene_call:
     input:
         gfa = rules.pangene.output['gfa']
     output:
-        'analyses/pangene/{reference}.call'
+        'analyses/pangene/{graph}.{reference}.call'
     localrule: True
     shell:
         '''

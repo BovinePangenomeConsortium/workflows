@@ -1,9 +1,6 @@
-import polars as pl
-from pathlib import PurePath
-
 rule mash_sketch:
     input:
-        fasta = multiext('data/freeze_1/{sample}.fa.gz','','.fai','.gzi')
+        fasta = multiext('data/currated_assemblies/{sample}.fa.gz','','.fai','.gzi')
     output:
         sketch = 'analyses/minigraph/mash/{sample}.msh'
     params:
@@ -19,9 +16,9 @@ mash sketch -p {threads} -o {params.prefix} {input.fasta[0]}
 
 rule mash_dist:
     input:
-        expand(rules.mash_sketch.output['sketch'],sample=pl.read_csv(config['metadata']).get_column('Filename').to_list())
+        lambda wildcards: expand(rules.mash_sketch.output['sketch'],sample=determine_pangenome_samples(wildcards.graph))
     output:
-        'analyses/minigraph/mash.txt'
+        'analyses/minigraph/{graph}.mash.txt'
     threads: 4
     resources:
         mem_per_cpu_mb = 2500,
@@ -33,7 +30,7 @@ mash dist -p {threads} {input} > {output}
 
 rule minigraph_construct:
     input:
-        assemblies = lambda wildcards: expand('data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
+        assemblies = lambda wildcards: expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
     output:
         gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.basic.gfa'
     threads: 1
@@ -48,7 +45,7 @@ minigraph -t {threads} -cxggs -j 0.05 -L {wildcards.L} {input.assemblies} > {out
 rule minigraph_call:
     input:
         gfa = rules.minigraph_construct.output['gfa'],
-        assembly = 'data/freeze_1/chromosomes/{sample}.{chromosome}.fa.gz'
+        assembly = 'data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz'
     output:
         bed = 'analyses/minigraph/{graph}/L{L}/{sample}.{chromosome}.bed'
     threads: 1

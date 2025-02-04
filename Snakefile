@@ -1,17 +1,12 @@
 import polars as pl
-
-include: 'snakepit/pangenome.smk'
-include: 'snakepit/QC_assemblies.smk'
-include: 'snakepit/minigraph.smk'
-include: 'snakepit/pggb.smk'
-include: 'snakepit/pangene.smk'
+from pathlib import PurePath
 
 wildcard_constraints:
     sample = r'[\w+\.\-_]+',
     graph = r'all|subspecies_representative|breed_representative',
     #reference = '|'.join(config.get('peptides'))
 
-metadata = pl.read_csv(config['metadata'])
+metadata = pl.read_csv(config['metadata'],infer_schema_length=10000)
 ANNOTATED_GENOMES = metadata.filter(pl.col('Reference annotation')=='Y').get_column('Filename').to_list()
 
 def determine_pangenome_samples(graph=None):
@@ -27,6 +22,12 @@ def determine_pangenome_samples(graph=None):
                    )
         case 'all' | _:
             return metadata.get_column('Filename').to_list()
+
+include: 'snakepit/pangenome.smk'
+include: 'snakepit/QC_assemblies.smk'
+include: 'snakepit/minigraph.smk'
+include: 'snakepit/pggb.smk'
+include: 'snakepit/pangene.smk'
 
 rule all:
     input:
