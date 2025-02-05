@@ -2,7 +2,12 @@ ruleorder: split_approx_mappings_in_chunks > wfmash
 
 wildcard_constraints:
     mode = r'mapping|alignment',
-    chunk = r'\.\d+|'
+    chunk = r'\.\d+|',
+    p = r'\d+',
+    segment_length = r'\d+',
+    chromosome = r'\d+|X|Y|MT',
+    k = r'\d+',
+    POA = r'asm(5|10|20)'
 
 rule wfmash_index:
     input:
@@ -13,7 +18,7 @@ rule wfmash_index:
         block_length = lambda wildcards: int(wildcards.segment_length) * 3
     threads: 4
     resources:
-        mem_mb_per_cpu = 40000,
+        mem_mb_per_cpu = 20000,
         runtime = '4h'
     shell:
         '''
@@ -44,7 +49,7 @@ rule wfmash:
         mapping = lambda wildcards, input: f'--align-paf {input.mapping}' if wildcards.mode == 'alignment' else '--approx-mapping'
     threads: lambda wildcards: 12 if wildcards.mode == 'mapping' else 16
     resources:
-        mem_mb_per_cpu = 8000,
+        mem_mb_per_cpu = 5000,
         runtime = '24h'
     shell:
         '''
