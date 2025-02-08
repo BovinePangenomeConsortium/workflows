@@ -115,6 +115,27 @@ do
 done
         '''
 
+#TODO: this still doesn't like getting non-existant chromosomes
+rule panSN_split2:
+    input:
+        fasta = multiext('data/currated_assemblies/{sample}.fa.gz','','.fai','.gzi')
+    output:
+        fasta = expand('data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=('X','Y','MT'))
+    params:
+        regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d',
+        _out = lambda wildcards, output: PurePath(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 2500,
+        runtime = '30m'
+    shell:
+        '''
+for C in X Y MT
+do
+  samtools faidx --continue --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
+done
+        '''
+
 rule panSN_gather:
     input:
         assemblies = lambda wildcards: expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
