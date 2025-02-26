@@ -55,7 +55,7 @@ rule minimap2_reference_aligned:
         fasta = rules.panSN_renaming.output['fasta'],
         reference = config['reference']
     output:
-        'analyses/QC/reference_alignment/{sample}.ARS_UCD2.0.paf.gz'
+        'analyses/QC/reference_alignment/{sample}.{reference}.paf.gz'
     threads: 4
     resources:
         mem_mb_per_cpu = 10000,
@@ -71,7 +71,7 @@ rule calculate_variant_level:
         paf = rules.minimap2_reference_aligned.output,
         reference = config['reference']
     output:
-        vcf = multiext('analyses/QC/reference_alignment/{sample}.vcf.gz','','.csi')
+        vcf = multiext('analyses/QC/reference_alignment/{sample}.{reference}.vcf.gz','','.csi')
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
@@ -82,6 +82,45 @@ pigz -p 2 -dc {input.paf} |\
 sort -k6,6 -k8,8n |\
 paftools.js call -f {input.reference} -s {wildcards.sample} - |\
 bcftools view --write-index -o {output.vcf[0]}
+        '''
+
+rule bedtools_makewindows:
+    input:
+        fai = lambda wildcards: config['references'][wildcards.reference] + ".fai"
+    output:
+        bed = 'analyses/QC/variant_density/{reference}.{size}.bed'
+    localrule: True
+    shell:
+        '''
+bedtools makewindows -g {input.fai} -w {wildcards.size} > {output.bed}
+        '''
+
+rule bedtools_coverage_variant:
+    input:
+        bed = rules.bedtools_makewindows.output['bed'],
+        vcf = rules.calculate_variant_level.output['vcf']
+    output:
+        csv = 'analyses/QC/variant_density/{sample}.{reference}.{size}.csv'
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 15000,
+        walltime = '4h'
+    shell:
+        '''
+bedtools coverage -a {input.bed} -b {input.vcf[0]} -counts |\
+awk 'BEGIN {{print "{wildcards.sample}"}} {{print $3}}' > {output.csv}
+        '''
+
+rule gather_variant_coverages:
+    input:
+        bed = rules.bedtools_makewindows.output['bed'],
+        csv = expand(rules.bedtools_coverage_variant.output,sample=determine_pangenome_samples(),allow_missing=True)
+    output:
+        csv = 'analyses/QC/variant_density/{reference}.{size}.csv.gz'
+    localrule: True
+    shell:
+        '''
+paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' {input.bed}) {input.csv} | pigz -@ 2 -c > {output.csv}
         '''
 
 rule calculate_reference_coverage:
