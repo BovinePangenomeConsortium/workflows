@@ -209,7 +209,7 @@ rule gffafix:
 rule vg_path_normalise:
     input:
         fasta = rules.panSN_gather.output['fasta'],
-        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.gfa' #rules.gffafix.output['gfa']
+        gfa = rules.gffafix.output['gfa']
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.vg.gfa'
     params:

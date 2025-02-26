@@ -1,6 +1,53 @@
+rule odgi_squeeze:
+    input:
+        og = expand('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.og',chromosome=ALL_CHROMOSOME,allow_missing=True)
+    output:
+        og = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.og',
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.gfa'
+    threads: 2
+    resources:
+        mem_mb_per_cpu = 20000,
+        walltime = '4h'
+    shell:
+        '''
+echo {input.og} | tr ' ' '\\n' > $TMPDIR/og.fofn
+odgi squeeze --optimize -t {threads} -f $TMPDIR/og.fofn -o /dev/stdout |
+tee {output.og} |
+odgi view -i /dev/stdin -g > {output.gfa} #TODO: sed the reference header here
+        '''
+
+rule concat_reference_sequence:
+    input:
+        fasta = expand(rules.panSN_gather.output['fasta'][0],chromosome=ALL_CHROMOSOME,allow_missing=True)
+    output:
+        fasta = multiext('data/currated_assemblies/{graph}/whole_genome.fa.gz','','.fai','.gzi')
+    localrule: True
+    shell:
+        '''
+cat {input} > {output[0]}
+samtools faidx {output[0]}
+        '''
+
+rule vg_autoindex:
+    input:
+        gfa = rules.odgi_squeeze.output['gfa'],
+        fasta = rules.concat_reference_sequence.output['fasta']
+    output:
+        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.gbz','.dist')
+    params:
+        prefix = lambda wildcards, output: PurePath(output.gbz[0]).with_suffix('')
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 200000,
+        walltime = '24h'
+    shell:
+        '''
+vg autoindex -p {params.prefix} -t {threads} -T $TMPDIR -r {input.fasta[0]} -g {input.gfa} -w lr-giraffe
+        '''
+
 rule kmc_count:
     input:
-        fastq = ''
+        fastq = 'data/sequencing_reads/{sample}.fq'
     output:
         kff = multiext('analyses/pangenome/giraffe/{sample}','.kmc_pre','.kmc_suf')
     params:
@@ -9,16 +56,6 @@ rule kmc_count:
         '''
 kmc -k29 -m32 -okff -t {threads} -hp {input.fastq} {params.prefix} $TMPDIR
         '''
-
-rule vg_autoindex:
-    input:
-        gfa = ''
-    output:
-        gbz = ''
-    shell:
-        '''
-    giraffe, sr-giraffe, lr-giraffe
-        ''''
 
 rule vg_giraffe_haplotype:
     input:
@@ -39,7 +76,7 @@ rule vg_giraffe_LR:
     input:
         ''
     output:
-        ''
+        gam = ''
     shell:
         '''
 vg giraffe -b hifi -Z hprc-v1.1-mc-chm13.d9.gbz -f longread/hifi.fq -p >hifi.mapped.gam
@@ -59,7 +96,7 @@ vg haplotypes --diploid-sampling --include-reference -v 2 -t 16 -H graph.hapl gr
 
 rule vg_stats:
     input:
-        gam = rules.vg_giraffe.output['gam']
+        gam = rules.vg_giraffe_LR.output['gam']
     output:
         stats = ''
     shell:
