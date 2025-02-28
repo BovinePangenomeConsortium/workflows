@@ -1,19 +1,26 @@
+def get_reference_sense_path():
+    for entry in metadata.filter(pl.col('Reference annotation')=='Y').iter_rows(named=True):
+        yield f"{entry['Animal ID']}#{entry['Haplotype']}"
+
 rule odgi_squeeze:
     input:
         og = expand('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.og',chromosome=ALL_CHROMOSOME,allow_missing=True)
     output:
         og = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.og',
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.gfa'
+    params:
+        reference_IDs = f"RS:Z:{' '.join(get_reference_sense_path())}"
     threads: 2
     resources:
         mem_mb_per_cpu = 20000,
-        walltime = '4h'
+        runtime = '4h'
     shell:
         '''
 echo {input.og} | tr ' ' '\\n' > $TMPDIR/og.fofn
 odgi squeeze --optimize -t {threads} -f $TMPDIR/og.fofn -o /dev/stdout |
 tee {output.og} |
-odgi view -i /dev/stdin -g > {output.gfa} #TODO: sed the reference header here
+odgi view -i /dev/stdin -g |\
+sed '1s/$/\\t{params.reference_IDs}/' > {output.gfa}
         '''
 
 rule concat_reference_sequence:
@@ -33,16 +40,16 @@ rule vg_autoindex:
         gfa = rules.odgi_squeeze.output['gfa'],
         fasta = rules.concat_reference_sequence.output['fasta']
     output:
-        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.gbz','.dist')
+        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.withzip.min','SR_graf.shortread.zipcodes')
     params:
         prefix = lambda wildcards, output: PurePath(output.gbz[0]).with_suffix('')
     threads: 1
     resources:
-        mem_mb_per_cpu = 200000,
-        walltime = '24h'
+        mem_mb_per_cpu = 150000,
+        runtime = '24h'
     shell:
         '''
-vg autoindex -p {params.prefix} -t {threads} -T $TMPDIR -r {input.fasta[0]} -g {input.gfa} -w lr-giraffe
+vg autoindex -p {params.prefix} -t {threads} -T $TMPDIR -r {input.fasta[0]} -g {input.gfa} -w sr-giraffe -w lr-giraffe
         '''
 
 rule kmc_count:
