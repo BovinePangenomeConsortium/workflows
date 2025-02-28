@@ -92,7 +92,8 @@ rule bedtools_makewindows:
     localrule: True
     shell:
         '''
-bedtools makewindows -g {input.fai} -w {wildcards.size} > {output.bed}
+bedtools makewindows -g {input.fai} -w {wildcards.size} |\
+sort -k1,1 -k2,2n > {output.bed}
         '''
 
 rule bedtools_coverage_variant:
@@ -103,12 +104,15 @@ rule bedtools_coverage_variant:
         csv = 'analyses/QC/variant_density/{sample}.{reference}.{size}.csv'
     threads: 1
     resources:
-        mem_mb_per_cpu = 15000,
-        walltime = '4h'
+        mem_mb_per_cpu = 7500,
+        runtime = '4h'
     shell:
         '''
-bedtools coverage -a {input.bed} -b {input.vcf[0]} -counts |\
-awk 'BEGIN {{print "{wildcards.sample}"}} {{print $3}}' > {output.csv}
+bcftools query -i 'type="snps"' -f '%CHROM\\t%POS' {input.vcf[0]} |\
+awk -v OFS='\\t' '{{print $1,$2,$2+1}}' |\
+sort -k1,1 -k2,2n |\
+bedtools coverage -a {input.bed} -b /dev/stdin -counts -sorted |\
+awk 'BEGIN {{print "{wildcards.sample}"}} {{print $4}}' > {output.csv}
         '''
 
 rule gather_variant_coverages:
@@ -117,10 +121,13 @@ rule gather_variant_coverages:
         csv = expand(rules.bedtools_coverage_variant.output,sample=determine_pangenome_samples(),allow_missing=True)
     output:
         csv = 'analyses/QC/variant_density/{reference}.{size}.csv.gz'
-    localrule: True
+    threads: 4
+    resources:
+        mem_mb_per_cpu = 5000,
+        runtime = '24h'
     shell:
         '''
-paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' {input.bed}) {input.csv} | pigz -@ 2 -c > {output.csv}
+paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' {input.bed}) {input.csv} | pigz -p {threads} -c > {output.csv}
         '''
 
 rule calculate_reference_coverage:

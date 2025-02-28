@@ -3,31 +3,37 @@ from pathlib import PurePath
 
 wildcard_constraints:
     sample = r'[\w+\.\-_]+',
-    graph = r'all|subspecies_representative|breed_representative',
-    #reference = '|'.join(config.get('peptides'))
+    graph = r'small_test|all|subspecies_representative|breed_representative',
+    chromosome = r'\d+|X|Y|MT',
+    L = r'\d+',
+    reference = '|'.join(config.get('references'))
 
 metadata = pl.read_csv(config['metadata'],infer_schema_length=10000)
 ANNOTATED_GENOMES = metadata.filter(pl.col('Reference annotation')=='Y').get_column('Filename').to_list()
 
-def determine_pangenome_samples(graph=None):
+ALL_CHROMOSOME = list(map(str,range(1,30))) + ['X','Y','MT']
 
+def determine_pangenome_samples(graph=None):
+    subset = None
     match graph:
+        case 'small_test':
+            subset = metadata.filter(pl.col('Filename').is_in(['ARS-UCD1.3','CxR_raft_trioUL.dip.charolais-sire.p_ctg','Charolais.haplotype1.chrNames.20231003','Wagyu_haplotype1_v1.polished','ASM4388211v1']))
         case 'breed_representative':
-            return (metadata.filter(pl.col('Species')=='Bos taurus')
-                            .filter(pl.col('Breed representative')=='Y').get_column('Filename').to_list()
-                   )
+            subset = (metadata.filter(pl.col('Species')=='Bos taurus')
+                            .filter(pl.col('Breed representative')=='Y'))
         case 'subspecies_representative':
-            return (metadata.filter(pl.col('Species')=='Bos taurus')
-                            .filter(pl.col('Breed representative')=='Y').get_column('Filename').to_list()
-                   )
+            subset = (metadata.filter(pl.col('Species')=='Bos taurus')
+                            .filter(pl.col('Breed representative')=='Y'))
         case 'all' | _:
-            return metadata.get_column('Filename').to_list()
+            subset = metadata
+    return subset.get_column('Filename').to_list()
 
 include: 'snakepit/pangenome.smk'
 include: 'snakepit/QC_assemblies.smk'
 include: 'snakepit/minigraph.smk'
 include: 'snakepit/pggb.smk'
 include: 'snakepit/pangene.smk'
+include: 'snakepit/pangenome_alignment.smk'
 
 rule all:
     input:
