@@ -1,6 +1,8 @@
 def get_reference_sense_path():
     for entry in metadata.filter(pl.col('Reference annotation')=='Y').iter_rows(named=True):
-        yield f"{entry['Animal ID']}#{entry['Haplotype']}"
+        yield f"{entry['Animal ID']}"
+        # see https://github.com/vgteam/vg/issues/4533
+        #yield f"{entry['Animal ID']}#{entry['Haplotype']}"
 
 rule odgi_squeeze:
     input:
