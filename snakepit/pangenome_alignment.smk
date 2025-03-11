@@ -19,9 +19,9 @@ rule odgi_squeeze:
     shell:
         '''
 echo {input.og} | tr ' ' '\\n' > $TMPDIR/og.fofn
-odgi squeeze --optimize -t {threads} -f $TMPDIR/og.fofn -o /dev/stdout |
+odgi squeeze --optimize --threads {threads} --input-graphs $TMPDIR/og.fofn --out /dev/stdout |
 tee {output.og} |
-odgi view -i /dev/stdin -g |\
+odgi view --idx /dev/stdin --to-gfa |\
 sed '1s/$/\\t{params.reference_IDs}/' > {output.gfa}
         '''
 
@@ -51,7 +51,13 @@ rule vg_autoindex:
         runtime = '24h'
     shell:
         '''
-vg autoindex -p {params.prefix} -t {threads} -T $TMPDIR -r {input.fasta[0]} -g {input.gfa} -w sr-giraffe -w lr-giraffe
+vg autoindex --prefix {params.prefix} \
+--threads {threads} \
+--tmp-dir $TMPDIR \
+--ref-fasta {input.fasta[0]} \
+--gfa {input.gfa} \
+--workflow sr-giraffe \
+--workflow lr-giraffe
         '''
 
 rule kmc_count:
@@ -75,9 +81,12 @@ rule vg_giraffe_haplotype:
         ''
     shell:
         '''
-vg giraffe --haplotype-name {input.hapl} --kff-name {input.kff} \
---gbz-name {input.gbz} --index-basename {params.prefix} \
---sample {wildcards.sample} --include-reference {params.ref}
+vg giraffe --haplotype-name {input.hapl} \
+--kff-name {input.kff} \
+--gbz-name {input.gbz} \
+--index-basename {params.prefix} \
+--sample {wildcards.sample} \
+--include-reference {params.ref}
         '''
 #vg giraffe -p -t 16 -Z graph.gbz --haplotype-name graph.hapl --kmer-name ${TMPDIR}/sample.kff -N sample -i -f sample.fq.gz > sample.gam
 
@@ -104,7 +113,7 @@ rule vg_haplotype:
         ''
     shell:
         '''
-        vg index -j graph.dist --no-nested-distance graph.gbz
+vg index -j graph.dist --no-nested-distance graph.gbz
 vg gbwt -p --num-threads 16 -r graph.ri -Z graph.gbz
 vg haplotypes --diploid-sampling --include-reference -v 2 -t 16 -H graph.hapl graph.gbz
         '''

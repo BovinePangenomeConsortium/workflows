@@ -23,14 +23,14 @@ rule wfmash_index:
     shell:
         '''
 wfmash \
--s {wildcards.segment_length} \
--l {params.block_length} \
--c 2000 \
--P 50k \
--p {wildcards.p} \
--n 1 \
--k 15 \
--t {threads} \
+--segment-length {wildcards.segment_length} \
+--block-length{params.block_length} \
+--chain-gap 2000 \
+--max-length 50k \
+--map-pct-id {wildcards.p} \
+--mappings 1 \
+--kmer-size 15 \
+--threads {threads} \
 --tmp-base $TMPDIR \
 --write-index {output.index} \
 {input.fasta[0]}
@@ -54,14 +54,14 @@ rule wfmash:
     shell:
         '''
 wfmash \
--s {wildcards.segment_length} \
--l {params.block_length} \
--c 2000 \
--P 50k \
--p {wildcards.p} \
--n 1 \
--k 15 \
--t {threads} \
+--segment-length {wildcards.segment_length} \
+--block-length{params.block_length} \
+--chain-gap 2000 \
+--max-length 50k \
+--map-pct-id {wildcards.p} \
+--mappings 1 \
+--kmer-size 15 \
+--threads {threads} \
 --tmp-base $TMPDIR \
 --read-index {input.index} \
 {params.mapping} \
@@ -173,23 +173,24 @@ rule smoothxg:
     shell:
         '''
 smoothxg \
--t {threads} \
--T {threads} \
--g {input.gfa} \
--r {params.n_haps} \
+--threads {threads} \
+--poa-threads {threads} \
+--gfa-in {input.gfa} \
+--n-haps {params.n_haps} \
 --base $TMPDIR \
 --chop-to 100 \
--I {params.block_id_min} \
--R 0.3 \
--j 0 \
--e 0 \
--l {params.POA_lengths} \
--p {params.POA_params} \
--O 0.001 \
--Y {params.POA_pad_depth} \
--d 0 -D 0 \
--V \
--o {output.gfa}
+--block-id-min {params.block_id_min} \
+--block-ratio-min 0.3 \
+--path-jump-max 0 \
+--edge-jump-max 0 \
+--poa-length-targets {params.POA_lengths} \
+--poa-params {params.POA_params} \
+--poa-padding-ratio 0.001 \
+--max-block-depth-adaptive-poa-padding {params.POA_pad_depth} \
+--min-block-depth-split 0 \
+--min-block-depth-mash 0 \
+--vanish-consensus \
+--smoothed-out {output.gfa}
         '''
 
 rule gffafix:
@@ -203,7 +204,7 @@ rule gffafix:
         runtime = '4h'
     shell:
         '''
-        gfaffix {input.gfa} -o {output.gfa} --threads {threads}
+gfaffix {input.gfa} --output_refined {output.gfa} --threads {threads}
         '''
 
 rule vg_path_normalise:
@@ -220,11 +221,11 @@ rule vg_path_normalise:
         runtime = '24h'
     shell:
         '''
-vg convert -t {threads} --packed-out --gfa-in {input.gfa} |\
-vg mod -t {threads} --chop 1024 - |\
-vg paths -t {threads} -n -Q {params.reference} --xg - |\
-vg mod -t {threads} --unchop - |\
-vg convert -t {threads} --gfa-out --no-wline - > {output.gfa}
+vg convert --threads {threads} --packed-out --gfa-in {input.gfa} |\
+vg mod --threads {threads} --chop 1024 - |\
+vg paths --threads {threads} --normalize-paths --paths-by {params.reference} --xg - |\
+vg mod --threads {threads} --unchop - |\
+vg convert --threads {threads} --gfa-out --no-wline - > {output.gfa}
         '''
 
 rule odgi_unchop:
@@ -239,11 +240,11 @@ rule odgi_unchop:
         runtime = '24h'
     shell:
         '''
-odgi build -t {threads} -P -g {input.gfa} -o - -O |\
-odgi unchop -P -t {threads} -i - -o - |\
-odgi sort -P -p Ygs --temp-dir $TMPDIR -t {threads} -i - -o - |\
+odgi build --threads {threads} --gfa {input.gfa} --out - --optimize |\
+odgi unchop --threads {threads} --idx - --out - |\
+odgi sort --pipeline Ygs --temp-dir $TMPDIR --threads {threads} --idx - --out - |\
 tee {output.og} |\
-odgi view -i - -g > {output.gfa}
+odgi view --idx - --to-gfa > {output.gfa}
         '''
 
 rule odgi_layout:
@@ -258,10 +259,11 @@ rule odgi_layout:
     shell:
         '''
 odgi layout \
--i {input.og} \
- -o {output.layout[0]} \
- -T {output.layout[1]} \
- -t {threads} --temp-dir $TMPDIR -P
+--idx {input.og} \
+--out {output.layout[0]} \
+--tsv {output.layout[1]} \
+--threads {threads} \
+--temp-dir $TMPDIR 
         '''
 
 rule odgi_draw:
@@ -279,10 +281,10 @@ rule odgi_draw:
     shell:
         '''
 odgi draw -i {input.og} \
--t {threads} \
+--threads {threads} \
 --coords-in {input.layout} \
 --png {output.image[0]} \
 --svg {output.image[1]} \
 {params.draw_paths} \
--H 1000
+--png-height 1000
         '''

@@ -1,10 +1,9 @@
-# viehgenom
+# Bovine Pangenome Consortium workflows
 
-A temporary home for pipelines related to the [Bovine Pangenome Consortium](https://bovinepangenome.github.io/).
+This is the home for pipelines related to the [Bovine Pangenome Consortium](https://bovinepangenomeconsortium.github.io/).
+This is a work in progress, but reach out if you have any questions!
 
-
-## Quality control
-
+### Assessing assembly quality
 
 We need to get a rough idea of how well assembled these genomes are, but for many samples we only have the assembly itself, not the raw data.
 As such, we have to rely on some proxy metrics.
@@ -17,11 +16,19 @@ Some should be self-explanatory, but otherwise here is a short description
  + autosome/X/Y/MT covered: the fraction of each chromosome covered by those `minimap2` alignments
    + we do this as a proxy to identify the sex of the assembly where not easily available and identify obvious misassemblies
 
-
-## Pangenome processing
-
-
-## Data analysis
-
 We can also estimate the average gap-compressed identity of the alignments through `cut -f 1,6,13 *.alignment.paf`
+
+### Pangenome processing
+
+
+### Reference pangenome building
+
+
+
+### Downstream reference pangenomics
+
+
+
+### Other pangenomic analyses
+
 

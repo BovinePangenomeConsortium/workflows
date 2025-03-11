@@ -135,7 +135,7 @@ do
   {{ grep -P "#$C{params.regex}\\s" {input.fasta[1]} || test $? = 1; }} | cut -f 1 > $TMPDIR/regions.list
   if [ -s $TMPDIR/regions.list ]
   then
-    samtools faidx --continue --write-index -r $TMPDIR/regions.list -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
+    samtools faidx --continue --write-index --region-file $TMPDIR/regions.list -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
   else
     touch {params._out}.$C.fa.gz {params._out}.$C.fa.gz.fai {params._out}.$C.fa.gz.gzi
   fi
