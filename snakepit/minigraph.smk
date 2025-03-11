@@ -16,21 +16,21 @@ mash sketch -p {threads} -o {params.prefix} {input.fasta[0]}
 
 rule mash_dist:
     input:
-        lambda wildcards: expand(rules.mash_sketch.output['sketch'],sample=determine_pangenome_samples(wildcards.graph))
+        sketches = expand(rules.mash_sketch.output['sketch'],sample=determine_pangenome_samples)
     output:
-        'analyses/minigraph/{graph}.mash.txt'
+        mash = 'analyses/minigraph/{graph}.mash.txt'
     threads: 4
     resources:
         mem_per_cpu_mb = 2500,
         runtime = '1h'
     shell:
         '''
-mash dist -p {threads} {input} > {output}
+mash dist -p {threads} {input.sketches} > {output.mash}
         '''
 
 rule minigraph_construct:
     input:
-        assemblies = lambda wildcards: expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
+        assemblies = expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples,allow_missing=True)
     output:
         gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.basic.gfa'
     threads: 1
@@ -59,7 +59,7 @@ minigraph -t {threads} -cxasm --call -j 0.05 -L {wildcards.L} {input.gfa} {input
 
 rule minigraph_path:
     input:
-        paths = lambda wildcards: expand(rules.minigraph_call.output['bed'],sample=determine_pangenome_samples(wildcards.graph),allow_missing=True),
+        paths = expand(rules.minigraph_call.output['bed'],sample=determine_pangenome_samples,allow_missing=True),
         gfa = rules.minigraph_construct.output['gfa']
     output:
         gfa = 'analyses/minigraph/{graph}/L{L}/{chromosome}.gfa'

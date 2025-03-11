@@ -118,7 +118,7 @@ awk 'BEGIN {{print "{wildcards.sample}"}} {{print $4}}' > {output.csv}
 rule gather_variant_coverages:
     input:
         bed = rules.bedtools_makewindows.output['bed'],
-        csv = expand(rules.bedtools_coverage_variant.output,sample=determine_pangenome_samples(),allow_missing=True)
+        csv = expand(rules.bedtools_coverage_variant.output,sample=determine_pangenome_samples,allow_missing=True)
     output:
         csv = 'analyses/QC/variant_density/{reference}.{size}.csv.gz'
     threads: 4
@@ -182,8 +182,8 @@ awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/
 #bcftools stats -r $(echo {1..29} | tr ' ' ',') -s - 67_samples.vcf.gz | grep "PSC"
 rule summarise_all_metrics:
     input:
-        metrics = lambda wildcards: expand(rules.summarise_sample_metrics.output['csv'],sample=determine_pangenome_samples(wildcards.graph)),
-        vcf = lambda wildcards: expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples(wildcards.graph))
+        metrics = expand(rules.summarise_sample_metrics.output['csv'],sample=determine_pangenome_samples),
+        vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples)
     output:
         metrics = 'analyses/QC_summary.{graph}.csv',
         #vcf = multiext('analyses/QC_variants.vcf.gz','','.csi')

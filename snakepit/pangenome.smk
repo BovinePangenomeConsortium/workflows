@@ -82,10 +82,9 @@ samtools faidx {output.fasta[0]}
 
 rule agc_create:
     input:
-        assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0],sample=determine_pangenome_samples(wildcards.archive))
-        #assemblies = lambda wildcards: expand(rules.panSN_renaming.output['fasta'][0] if wildcards.archive == 'panSN' else 'data/raw_assemblies/{sample}.fasta.gz',sample=determine_pangenome_samples())
+        assemblies = expand(rules.panSN_renaming.output['fasta'][0],sample=determine_pangenome_samples)
     output:
-        agc = 'data/{archive}.agc'
+        agc = 'data/{graph}.agc'
     threads: 8
     resources:
         mem_mb_per_cpu = 10000,
@@ -132,13 +131,20 @@ rule panSN_split2:
         '''
 for C in X Y MT
 do
-  samtools faidx --continue --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
+  #ugly hack to avoid turning off pipefail. Grep returns exit code of 1 if no matches, which we will allow
+  {{ grep -P "#$C{params.regex}\\s" {input.fasta[1]} || test $? = 1; }} | cut -f 1 > $TMPDIR/regions.list
+  if [ -s $TMPDIR/regions.list ]
+  then
+    samtools faidx --continue --write-index -r $TMPDIR/regions.list -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
+  else
+    touch {params._out}.$C.fa.gz {params._out}.$C.fa.gz.fai {params._out}.$C.fa.gz.gzi
+  fi
 done
         '''
 
 rule panSN_gather:
     input:
-        assemblies = lambda wildcards: expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples(wildcards.graph),allow_missing=True)
+        assemblies = expand('data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz',sample=determine_pangenome_samples,allow_missing=True)
     output:
         fasta = multiext('data/currated_assemblies/{graph}/{chromosome}.fa.gz','','.fai','.gzi')
     shell:

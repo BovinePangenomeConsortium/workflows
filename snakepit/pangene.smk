@@ -41,7 +41,7 @@ pigz -p {threads} -c > {output.paf}
 
 rule pangene:
     input:
-        paf = lambda wildcards: expand(rules.miniprot_align.output['paf'],sample=determine_pangenome_samples(wildcards.graph))
+        paf = expand(rules.miniprot_align.output['paf'],sample=determine_pangenome_samples)
     output:
         gfa = 'analyses/pangene/{graph}.{reference}.gfa'
     threads: 1

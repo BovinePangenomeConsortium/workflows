@@ -133,13 +133,13 @@ rule seqwish:
     shell:
         '''
 seqwish \
--s {input.fasta[0]} \
--p {input.alignment} \
--k {wildcards.k} \
--f 0 \
--g {output.gfa} \
--B 10000000 \
--t {threads} \
+--seqs {input.fasta[0]} \
+--paf-alns {input.alignment} \
+--min-match-len {wildcards.k} \
+--sparse-factor 0 \
+--gfa {output.gfa} \
+--transclose-batch 10000000 \
+--threads {threads} \
 --temp-dir $TMPDIR
         '''
 
@@ -168,8 +168,8 @@ rule smoothxg:
         POA_params = POA_params
     threads: 12
     resources:
-        mem_mb_per_cpu = 25000,
-        runtime = '72h'
+        mem_mb_per_cpu = 10000,
+        runtime = '24h'
     shell:
         '''
 smoothxg \

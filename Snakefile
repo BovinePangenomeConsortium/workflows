@@ -1,10 +1,13 @@
 import polars as pl
 from pathlib import PurePath
 
+
+ALL_CHROMOSOME = list(map(str,range(1,30))) + ['X','Y','MT']
+
 wildcard_constraints:
     sample = r'[\w+\.\-_]+',
-    graph = r'small_test|all|subspecies_representative|breed_representative',
-    chromosome = r'\d+|X|Y|MT',
+    graph = r'|'.join(config.get('pangenomes','all')),
+    chromosome = r'|'.join(ALL_CHROMOSOME),
     L = r'\d+',
     reference = '|'.join(config.get('references'))
 
@@ -13,8 +16,10 @@ ANNOTATED_GENOMES = metadata.filter(pl.col('Reference annotation')=='Y').get_col
 
 ALL_CHROMOSOME = list(map(str,range(1,30))) + ['X','Y','MT']
 
-def determine_pangenome_samples(graph=None):
-    subset = None
+def determine_pangenome_samples(wildcards):
+    
+    subset = metadata.filter(pl.col('Filename').is_in(config['pangenomes'][wildcards.graph])) if ('pangenomes' in config and wildcards.graph != 'all') else metadata
+    return subset.get_column('Filename').to_list()
     match graph:
         case 'small_test':
             subset = metadata.filter(pl.col('Filename').is_in(['ARS-UCD1.3','CxR_raft_trioUL.dip.charolais-sire.p_ctg','Charolais.haplotype1.chrNames.20231003','Wagyu_haplotype1_v1.polished','ASM4388211v1']))
@@ -37,6 +42,5 @@ include: 'snakepit/pangenome_alignment.smk'
 
 rule all:
     input:
-        'analyses/freeze_1/QC_summary.csv',
-        'analyses/minigraph/breed_representative/25.gfa',
-        'analyses/pggb/breed_representative/p95_s5000/25.k23.POAasm5.unchop.gfa'
+        'analyses/QC_summary.all.csv',
+        expand('analyses/pggb/medium_test/p95_s5000/{chromosome}.k31.POAasm20.unchop.graph.png',chromosome=ALL_CHROMOSOME)
