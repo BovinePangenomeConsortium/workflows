@@ -42,7 +42,7 @@ rule vg_autoindex:
         gfa = rules.odgi_squeeze.output['gfa'],
         fasta = rules.concat_reference_sequence.output['fasta']
     output:
-        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.withzip.min','SR_graf.shortread.zipcodes')
+        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.zipcodes','.shortread.withzip.min')
     params:
         prefix = lambda wildcards, output: PurePath(output.gbz[0]).with_suffix('')
     threads: 1
@@ -83,12 +83,18 @@ vg giraffe --haplotype-name {input.hapl} --kff-name {input.kff} \
 
 rule vg_giraffe_LR:
     input:
-        ''
+        gbz = rules.vg_autoindex.output['gbz'],
+        bam = ''
     output:
-        gam = ''
+        gam = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.{sample}.gam'
+    threads: 8
+    resources:
+        mem_mb_per_cpu = 8000,
+        runtime = '4h'
     shell:
         '''
-vg giraffe -b hifi -Z hprc-v1.1-mc-chm13.d9.gbz -f longread/hifi.fq -p >hifi.mapped.gam
+samtools fastq -@ {threads} {input.bam} |\
+vg giraffe --parameter-preset hifi --threads {threads} --gbz-name {input.gbz[1]} --fastq-in /dev/stdin > {output.gam}
         '''
 
 rule vg_haplotype:
