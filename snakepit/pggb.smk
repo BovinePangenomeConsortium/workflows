@@ -24,7 +24,7 @@ rule wfmash_index:
         '''
 wfmash \
 --segment-length {wildcards.segment_length} \
---block-length{params.block_length} \
+--block-length {params.block_length} \
 --chain-gap 2000 \
 --max-length 50k \
 --map-pct-id {wildcards.p} \
@@ -55,7 +55,7 @@ rule wfmash:
         '''
 wfmash \
 --segment-length {wildcards.segment_length} \
---block-length{params.block_length} \
+--block-length {params.block_length} \
 --chain-gap 2000 \
 --max-length 50k \
 --map-pct-id {wildcards.p} \
@@ -198,10 +198,10 @@ rule gffafix:
         gfa = rules.smoothxg.output['gfa']
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.gffafix.gfa'
-    threads: 6
+    threads: 8
     resources:
-        mem_mb_per_cpu = 7000,
-        runtime = '4h'
+        mem_mb_per_cpu = 12000,
+        runtime = '24h'
     shell:
         '''
 gfaffix {input.gfa} --output_refined {output.gfa} --threads {threads}

@@ -53,7 +53,7 @@ rm -rf {params._dir}/cetartiodactyla_odb10
 rule minimap2_reference_aligned:
     input:
         fasta = rules.panSN_renaming.output['fasta'],
-        reference = config['reference']
+        reference = lambda wildcards: config['references'][wildcards.reference]
     output:
         'analyses/QC/reference_alignment/{sample}.{reference}.paf.gz'
     threads: 4
@@ -69,7 +69,7 @@ pigz -p {threads} -c > {output}
 rule calculate_variant_level:
     input:
         paf = rules.minimap2_reference_aligned.output,
-        reference = config['reference']
+        reference = lambda wildcards: config['references'][wildcards.reference]
     output:
         vcf = multiext('analyses/QC/reference_alignment/{sample}.{reference}.vcf.gz','','.csi')
     threads: 1
@@ -86,7 +86,7 @@ bcftools view --write-index -o {output.vcf[0]}
 
 rule bedtools_makewindows:
     input:
-        fai = lambda wildcards: config['references'][wildcards.reference] + ".fai"
+        fai = lambda wildcards: f"{config['references'][wildcards.reference]}.fai"
     output:
         bed = 'analyses/QC/variant_density/{reference}.{size}.bed'
     localrule: True
@@ -133,9 +133,9 @@ paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' 
 rule calculate_reference_coverage:
     input:
         paf = rules.minimap2_reference_aligned.output,
-        fai = config['reference'] + ".fai"
+        fai = lambda wildcards: f"{config['references'][wildcards.reference]}.fai"
     output:
-        bed = 'analyses/QC/reference_alignment/{sample}.covered.bed'
+        bed = 'analyses/QC/reference_alignment/{sample}.{reference}.covered.bed'
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,
