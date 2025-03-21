@@ -193,7 +193,7 @@ smoothxg \
 --smoothed-out {output.gfa}
         '''
 
-rule gffafix:
+rule GFAffix:
     input:
         gfa = rules.smoothxg.output['gfa']
     output:
@@ -210,7 +210,7 @@ gfaffix {input.gfa} --output_refined {output.gfa} --threads {threads}
 rule vg_path_normalise:
     input:
         fasta = rules.panSN_gather.output['fasta'],
-        gfa = rules.gffafix.output['gfa']
+        gfa = rules.GFAffix.output['gfa']
     output:
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.vg.gfa'
     params:
@@ -230,7 +230,7 @@ vg convert --threads {threads} --gfa-out --no-wline - > {output.gfa}
 
 rule odgi_unchop:
     input:
-        gfa = rules.vg_path_normalise.output['gfa'] if config.get('Normalise_path',False) else rules.gffafix.output['gfa']
+        gfa = rules.vg_path_normalise.output['gfa'] if config.get('Normalise_path',False) else rules.GFAffix.output['gfa']
     output:
         og = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.og',
         gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.gfa'

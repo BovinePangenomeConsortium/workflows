@@ -4,6 +4,10 @@ def get_reference_sense_path():
         # see https://github.com/vgteam/vg/issues/4533
         #yield f"{entry['Animal ID']}#{entry['Haplotype']}"
 
+
+#vg simplify -t 2 -P 85D7A68E -L 0.8 -m 20 small.pg > small_filtered_no_K.pg
+## simplify graph upstream?
+
 rule odgi_squeeze:
     input:
         og = expand('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.og',chromosome=ALL_CHROMOSOME,allow_missing=True)
@@ -14,7 +18,7 @@ rule odgi_squeeze:
         reference_IDs = f"RS:Z:{' '.join(get_reference_sense_path())}"
     threads: 2
     resources:
-        mem_mb_per_cpu = 20000,
+        mem_mb_per_cpu = 40000,
         runtime = '4h'
     shell:
         '''
@@ -62,14 +66,19 @@ vg autoindex --prefix {params.prefix} \
 
 rule kmc_count:
     input:
-        fastq = 'data/sequencing_reads/{sample}.fq'
+        fastq = expand('/cluster/work/pausch/alex/genome_alignment/fastq/{sample}.hap1.R{N}.SR.fq.gz',N=(1,2),allow_missing=True)
+        #fastq = 'data/sequencing_reads/{sample}.fq'
     output:
-        kff = multiext('analyses/pangenome/giraffe/{sample}','.kmc_pre','.kmc_suf')
+        kff = 'analyses/pangenome/giraffe/{sample}.kff'
     params:
         prefix = lambda wildcards, output: PurePath(output['kff']).with_suffix('')
+    threads: 4
+    resources:
+        mem_mb_per_cpu = 8000,
+        runtime = '1h'
     shell:
         '''
-kmc -k29 -m32 -okff -t {threads} -hp {input.fastq} {params.prefix} $TMPDIR
+kmc -k29 -m32 -okff -t{threads} -hp -fq @<(echo {input.fastq} | tr " " "\\n") {params.prefix} $TMPDIR
         '''
 
 rule vg_giraffe_haplotype:
@@ -90,12 +99,28 @@ vg giraffe --haplotype-name {input.hapl} \
         '''
 #vg giraffe -p -t 16 -Z graph.gbz --haplotype-name graph.hapl --kmer-name ${TMPDIR}/sample.kff -N sample -i -f sample.fq.gz > sample.gam
 
+def get_sample_read_type(wildcards):
+    match alignment_metadata.filter(pl.col('sample ID')==wildcards.sample).get_column('read type')[0]:
+        case 'HiFi':
+            return 'hifi'
+        case 'Illumina-PE':
+            return 'default'
+        case 'Illumina-SE':
+            return 'chaining-sr'
+        case _:
+            return 'default'
+
+def get_sample_bam(wildcards):
+    return alignment_metadata.filter(pl.col('sample ID')==wildcards.sample).get_column('bam')[0]
+
 rule vg_giraffe_LR:
     input:
         gbz = rules.vg_autoindex.output['gbz'],
-        bam = ''
+        bam = get_sample_bam
     output:
         gam = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.{sample}.gam'
+    params:
+        mode = get_sample_read_type
     threads: 8
     resources:
         mem_mb_per_cpu = 8000,
@@ -103,9 +128,10 @@ rule vg_giraffe_LR:
     shell:
         '''
 samtools fastq -@ {threads} {input.bam} |\
-vg giraffe --parameter-preset hifi --threads {threads} --gbz-name {input.gbz[1]} --fastq-in /dev/stdin > {output.gam}
+vg giraffe --parameter-preset {params.mode} --threads {threads} --gbz-name {input.gbz[1]} --fastq-in /dev/stdin > {output.gam}
         '''
 
+#vg gbwt --gfa-input --gbz-format
 rule vg_haplotype:
     input:
         ''
@@ -113,9 +139,9 @@ rule vg_haplotype:
         ''
     shell:
         '''
-vg index -j graph.dist --no-nested-distance graph.gbz
-vg gbwt -p --num-threads 16 -r graph.ri -Z graph.gbz
-vg haplotypes --diploid-sampling --include-reference -v 2 -t 16 -H graph.hapl graph.gbz
+vg index --dist-name graph.dist --no-nested-distance {input.gbz}
+vg gbwt --num-threads 16 --r-index graph.ri --gbz-input {input.gbz}
+vg haplotypes --diploid-sampling --include-reference --threads 16 --haplotype-output graph.hapl {input.gbz}
         '''
 
 rule vg_stats:
@@ -125,5 +151,5 @@ rule vg_stats:
         stats = ''
     shell:
         '''
-vg stats -a {input.gam} > {output.stats}
+vg stats --alignments {input.gam} > {output.stats}
         '''
