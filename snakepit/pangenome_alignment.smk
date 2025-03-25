@@ -19,7 +19,7 @@ rule odgi_squeeze:
     threads: 2
     resources:
         mem_mb_per_cpu = 40000,
-        runtime = '4h'
+        runtime = '24h'
     shell:
         '''
 echo {input.og} | tr ' ' '\\n' > $TMPDIR/og.fofn
@@ -81,14 +81,92 @@ rule kmc_count:
 kmc -k29 -m32 -okff -t{threads} -hp -fq @<(echo {input.fastq} | tr " " "\\n") {params.prefix} $TMPDIR
         '''
 
-rule vg_giraffe_haplotype:
+rule vg_gbwt:
+    input:
+        gfa = rules.odgi_squeeze.output['gfa']
+    output:
+        gbz = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.gbz'
+    threads: 2
+    resources:
+        mem_mb_per_cpu = 50000,
+        runtime = '24h'
+    shell:
+        '''
+vg gbwt \
+--gfa-input {input.gfa} \
+--gbz-format \
+--graph-name {output.gbz} \
+--num-threads {threads}
+        '''
+
+rule vg_index:
+    input:
+        gbz = rules.vg_gbwt.output['gbz']
+    output:
+        dist = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.dist'
+    threads: 2
+    resources:
+        mem_mb_per_cpu = 25000,
+        runtime = '4h'
+    shell:
+        '''
+vg index \
+--temp-dir $TMPDIR \
+--no-nested-distance \
+--dist-name {output.dist} \
+--threads {threads} \
+{input.gbz}
+        '''
+
+rule vg_haplotype:
+    input:
+        gbz = rules.vg_gbwt.output['gbz'],
+        dist = rules.vg_index.output['dist']
+    output:
+        hapl = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.ri','.hapl')
+    threads: 4
+    resources:
+        mem_mb_per_cpu = 8000,
+        runtime = '4h'
+    shell:
+        '''
+#vg index --dist-name graph.dist --no-nested-distance {input.gbz}
+vg gbwt --num-threads {threads} --r-index {output.hapl[0]} --gbz-input {input.gbz}
+vg haplotypes --diploid-sampling --include-reference --threads {threads} --haplotype-output {output.hapl[1]} {input.gbz}
+        '''
+
+rule vg_autoindex_personalised:
+    input:
+        hapl = '',
+        gbz = '',
+        kff = ''
+    output:
+        'something'
+    shell:
+        '''
+vg haplotypes -v 2 -t {threads} \
+--include-reference \
+--diploid-sampling \
+-i graph.hapl \
+-k ${TMPDIR}/sample.kff \
+-g ${TMPDIR}/sampled.gbz \
+graph.gbz
+
+#do we need to index?
+'''
+
+rule vg_giraffe_personalised:
     input:
         kff = rules.kmc_count.output['kff'],
-        hapl = '',
-        gbz = ''
+        hapl = rules.vg_haplotype.output['hapl'][1],
+        gbz = '' #some index on the fly
     output:
         ''
     shell:
+        '''
+vg giraffe -p -t 16 -Z ${TMPDIR}/sampled.gbz -i -f sample.fq.gz > sample.gam
+        '''
+
         '''
 vg giraffe --haplotype-name {input.hapl} \
 --kff-name {input.kff} \
@@ -129,19 +207,6 @@ rule vg_giraffe_LR:
         '''
 samtools fastq -@ {threads} {input.bam} |\
 vg giraffe --parameter-preset {params.mode} --threads {threads} --gbz-name {input.gbz[1]} --fastq-in /dev/stdin > {output.gam}
-        '''
-
-#vg gbwt --gfa-input --gbz-format
-rule vg_haplotype:
-    input:
-        ''
-    output:
-        ''
-    shell:
-        '''
-vg index --dist-name graph.dist --no-nested-distance {input.gbz}
-vg gbwt --num-threads 16 --r-index graph.ri --gbz-input {input.gbz}
-vg haplotypes --diploid-sampling --include-reference --threads 16 --haplotype-output graph.hapl {input.gbz}
         '''
 
 rule vg_stats:
