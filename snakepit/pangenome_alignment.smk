@@ -1,3 +1,4 @@
+#subset by graph
 def get_reference_sense_path():
     for entry in metadata.filter(pl.col('Reference annotation')=='Y').iter_rows(named=True):
         yield f"{entry['Animal ID']}"
@@ -18,15 +19,28 @@ rule odgi_squeeze:
         reference_IDs = f"RS:Z:{' '.join(get_reference_sense_path())}"
     threads: 2
     resources:
-        mem_mb_per_cpu = 40000,
+        mem_mb_per_cpu = 60000,
         runtime = '24h'
     shell:
         '''
 echo {input.og} | tr ' ' '\\n' > $TMPDIR/og.fofn
 odgi squeeze --optimize --threads {threads} --input-graphs $TMPDIR/og.fofn --out /dev/stdout |
 tee {output.og} |
-odgi view --idx /dev/stdin --to-gfa |\
-sed '1s/$/\\t{params.reference_IDs}/' > {output.gfa}
+odgi view --threads {threads} --idx /dev/stdin --to-gfa > {output.gfa}
+        '''
+
+rule vg_combine:
+    input:
+        gfa = expand('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.gfa',chromosome=ALL_CHROMOSOME,allow_missing=True)
+    output:
+        vg = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.vg'
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 60000,
+        runtime = '4h'
+    shell:
+        '''
+vg combine {input.gfa} > {output.vg}
         '''
 
 rule concat_reference_sequence:
@@ -46,7 +60,7 @@ rule vg_autoindex:
         gfa = rules.odgi_squeeze.output['gfa'],
         fasta = rules.concat_reference_sequence.output['fasta']
     output:
-        gbz = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.zipcodes','.shortread.withzip.min')
+        gbz = multiext('analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.zipcodes','.shortread.withzip.min')
     params:
         prefix = lambda wildcards, output: PurePath(output.gbz[0]).with_suffix('')
     threads: 1
@@ -69,7 +83,7 @@ rule kmc_count:
         fastq = expand('/cluster/work/pausch/alex/genome_alignment/fastq/{sample}.hap1.R{N}.SR.fq.gz',N=(1,2),allow_missing=True)
         #fastq = 'data/sequencing_reads/{sample}.fq'
     output:
-        kff = 'analyses/pangenome/giraffe/{sample}.kff'
+        kff = 'analyses/giraffe/kmers/{sample}.kff'
     params:
         prefix = lambda wildcards, output: PurePath(output['kff']).with_suffix('')
     threads: 4
@@ -83,19 +97,24 @@ kmc -k29 -m32 -okff -t{threads} -hp -fq @<(echo {input.fastq} | tr " " "\\n") {p
 
 rule vg_gbwt:
     input:
-        gfa = rules.odgi_squeeze.output['gfa']
+        #gfa = rules.odgi_squeeze.output['gfa'],
+        vg = rules.vg_combine.output['vg']
     output:
-        gbz = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.gbz'
+        gbz = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.gbz',
+        ri = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.ri'
+    params:
+        graph_in = lambda wildcards, input: "--gfa-input {input[0]}" if Path(input[0]).suffix == '.gfa' else f"--xg-name {input[0]}"
     threads: 2
     resources:
         mem_mb_per_cpu = 50000,
-        runtime = '24h'
+        runtime = '4h'
     shell:
         '''
 vg gbwt \
---gfa-input {input.gfa} \
+{params.graph_in} \
 --gbz-format \
 --graph-name {output.gbz} \
+--r-index {output.ri} \
 --num-threads {threads}
         '''
 
@@ -103,7 +122,7 @@ rule vg_index:
     input:
         gbz = rules.vg_gbwt.output['gbz']
     output:
-        dist = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.dist'
+        dist = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.dist'
     threads: 2
     resources:
         mem_mb_per_cpu = 25000,
@@ -121,18 +140,25 @@ vg index \
 rule vg_haplotype:
     input:
         gbz = rules.vg_gbwt.output['gbz'],
+        ri = rules.vg_gbwt.output['ri'],
         dist = rules.vg_index.output['dist']
     output:
-        hapl = multiext('analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.ri','.hapl')
+        hapl = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.hapl'
+    params:
+        reference_sense = ' '.join([f"--set-reference {path}" for path in get_reference_sense_path()])
     threads: 4
     resources:
         mem_mb_per_cpu = 8000,
         runtime = '4h'
     shell:
         '''
-#vg index --dist-name graph.dist --no-nested-distance {input.gbz}
-vg gbwt --num-threads {threads} --r-index {output.hapl[0]} --gbz-input {input.gbz}
-vg haplotypes --diploid-sampling --include-reference --threads {threads} --haplotype-output {output.hapl[1]} {input.gbz}
+vg haplotypes \
+--diploid-sampling \
+--include-reference \
+{params.reference_sense} \
+--threads {threads} \
+--haplotype-output {output.hapl} \
+{input.gbz}
         '''
 
 rule vg_autoindex_personalised:
@@ -144,31 +170,51 @@ rule vg_autoindex_personalised:
         'something'
     shell:
         '''
-vg haplotypes -v 2 -t {threads} \
+vg haplotypes \
+--threads {threads} \
 --include-reference \
 --diploid-sampling \
 -i graph.hapl \
 -k ${TMPDIR}/sample.kff \
 -g ${TMPDIR}/sampled.gbz \
 graph.gbz
+        '''
 
-#do we need to index?
-'''
-
+#integrated approach
+#--set-reference?
+#reference fasta?
 rule vg_giraffe_personalised:
     input:
         kff = rules.kmc_count.output['kff'],
-        hapl = rules.vg_haplotype.output['hapl'][1],
-        gbz = '' #some index on the fly
+        gbz = rules.vg_gbwt.output['gbz'],
+        hapl = rules.vg_haplotype.output['hapl'],
+        fastq = expand('/cluster/work/pausch/alex/genome_alignment/fastq/{sample}.hap1.R{N}.SR.fq.gz',N=(1,2),allow_missing=True)
     output:
-        ''
+        gam = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.{sample}.personalised.gam'
+    params:
+        fastq = lambda wildcards, input: ' '.join([f'--fastq-in {fq}' for fq in input.fastq])
+    threads: 8
+    resources:
+        mem_mb_per_cpu = 9000,
+        runtime = '24h'
     shell:
         '''
-vg giraffe -p -t 16 -Z ${TMPDIR}/sampled.gbz -i -f sample.fq.gz > sample.gam
+vg giraffe \
+--threads {threads} \
+--gbz-name {input.gbz} \
+--haplotype-name {input.hapl} \
+--kff-name {input.kff} \
+--parameter-preset default \
+{params.fastq} > {output.gam}
         '''
 
+rule fake:
+    output:
+        'fake'
+    shell:
         '''
-vg giraffe --haplotype-name {input.hapl} \
+vg giraffe \
+--haplotype-name {input.hapl} \
 --kff-name {input.kff} \
 --gbz-name {input.gbz} \
 --index-basename {params.prefix} \
@@ -196,7 +242,7 @@ rule vg_giraffe_LR:
         gbz = rules.vg_autoindex.output['gbz'],
         bam = get_sample_bam
     output:
-        gam = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.{sample}.gam'
+        gam = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.{sample}.LR.gam'
     params:
         mode = get_sample_read_type
     threads: 8
