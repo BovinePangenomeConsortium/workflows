@@ -43,6 +43,25 @@ rule vg_combine:
 vg combine {input.gfa} > {output.vg}
         '''
 
+ruleorder: gfalace > vg_convert > odgi_squeeze
+rule vg_convert:
+    input:
+        vg = rules.vg_combine.output['vg']
+    output:
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.gfa'
+    threads: 2
+    resources:
+        mem_mb_per_cpu = 35000,
+        runtime = '4h'
+    shell:
+        '''
+vg convert \
+--threads {threads} \
+--no-wline \
+--gfa-out \
+{input.vg} > {output.gfa}
+        '''
+
 rule concat_reference_sequence:
     input:
         fasta = expand(rules.panSN_gather.output['fasta'][0],chromosome=ALL_CHROMOSOME,allow_missing=True)
@@ -95,26 +114,42 @@ rule kmc_count:
 kmc -k29 -m32 -okff -t{threads} -hp -fq @<(echo {input.fastq} | tr " " "\\n") {params.prefix} $TMPDIR
         '''
 
+rule gfalace:
+    input:
+        gfa = expand('analyses/pggb/{graph}/p{p}_s{segment_length}/{chromosome}.k{k}.POA{POA}.unchop.gfa',chromosome=ALL_CHROMOSOME,allow_missing=True)
+    output:
+        gfa = 'analyses/pggb/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.gfa'
+    threads: 1
+    resources:
+        mem_mb_per_cpu = 90000,
+        runtime = '2h'
+    shell:
+        '''
+gfalace --naive-join -o {output.gfa} -g {input.gfa}
+        '''
+
 rule vg_gbwt:
     input:
         #gfa = rules.odgi_squeeze.output['gfa'],
-        vg = rules.vg_combine.output['vg']
+        rules.vg_convert.output['gfa']
     output:
         gbz = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.gbz',
         ri = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.ri'
     params:
-        graph_in = lambda wildcards, input: "--gfa-input {input[0]}" if Path(input[0]).suffix == '.gfa' else f"--xg-name {input[0]}"
+        graph_in = lambda wildcards, input: f"--gfa-input {input[0]}" if Path(input[0]).suffix == '.gfa' else f"--xg-name {input[0]}"
     threads: 2
     resources:
-        mem_mb_per_cpu = 50000,
-        runtime = '4h'
+        mem_mb_per_cpu = 30000,
+        runtime = '120h'
     shell:
         '''
 vg gbwt \
+--progress \
 {params.graph_in} \
 --gbz-format \
 --graph-name {output.gbz} \
 --r-index {output.ri} \
+--num-jobs {threads} \
 --num-threads {threads}
         '''
 
