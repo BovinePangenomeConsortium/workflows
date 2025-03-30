@@ -160,8 +160,8 @@ rule vg_index:
         dist = 'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop.direct.dist'
     threads: 2
     resources:
-        mem_mb_per_cpu = 25000,
-        runtime = '4h'
+        mem_mb_per_cpu = 40000,
+        runtime = '24h'
     shell:
         '''
 vg index \
@@ -196,23 +196,34 @@ vg haplotypes \
 {input.gbz}
         '''
 
-rule vg_autoindex_personalised:
+rule vg_haplotypes_personalised:
     input:
         hapl = '',
         gbz = '',
         kff = ''
     output:
-        'something'
+        'analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop/{sample}'
     shell:
         '''
 vg haplotypes \
 --threads {threads} \
 --include-reference \
 --diploid-sampling \
--i graph.hapl \
--k ${TMPDIR}/sample.kff \
--g ${TMPDIR}/sampled.gbz \
-graph.gbz
+--haplotype-input {input.hapl} \
+--kmer-input {input.kff} \
+--distance-index {input.dist} \
+--r-index {input.ri} \
+--gbz-output {output.gbz} \
+{input.gbz}
+
+vg autoindex \
+--prefix {params.prefix} \
+--threads {threads} \
+--tmp-dir $TMPDIR \
+--ref-fasta {input.fasta[0]} \
+--gfa {input.gfa} \
+--workflow sr-giraffe \
+--workflow lr-giraffe
         '''
 
 #integrated approach
