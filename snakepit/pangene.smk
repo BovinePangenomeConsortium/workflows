@@ -23,9 +23,27 @@ rule download_annotated_peptides:
 wget -O {output.fasta} {params.url} 
         '''
 
+rule minisplice:
+    input:
+        fasta = rules.panSN_renaming.output['fasta']
+    output:
+        splicing = 'analyses/pangene/{sample}.tsv'
+    threads: 8
+    resources:
+        mem_mb_per_cpu = 1000
+    modules:
+        'load_eth_proxy'
+    shell:
+        '''
+wget -O- https://zenodo.org/records/15814006/files/vi2-7k.tgz | tar -xzf - -C $TMPDIR
+
+minisplice predict -t {threads} -c $TMPDIR/vi2-7k.kan.cali $TMPDIR/vi2-7k.kan {input.fasta} > {output.splicing}
+        '''
+        
 rule miniprot_align:
     input:
         fasta = rules.miniprot_index.output['index'],
+        splicing = rules.minisplice.output['splicing'],
         peptides = rules.download_annotated_peptides.output['fasta'] 
     output:
         paf = 'analyses/pangene/{sample}.{reference}.paf.gz'
@@ -35,7 +53,7 @@ rule miniprot_align:
         runtime = '2h'
     shell:
         '''
-miniprot -t {threads} --outs=0.97 -I -u {input.fasta} {input.peptides} |\
+miniprot -t {threads} --outs=0.97 -I -u --spsc={input.splicing} {input.fasta} {input.peptides} |\
 pigz -p {threads} -c > {output.paf}
         '''
 
