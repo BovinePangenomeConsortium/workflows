@@ -14,39 +14,45 @@ miniprot -t {threads} -d {output.index} {input.fasta}
 
 rule download_annotated_peptides:
     output:
-        fasta = 'analyses/pangene/peptides/{reference}.pep.fa.gz'
+        fasta = 'analyses/pangene/peptides/{peptides}.pep.fa.gz'
     params:
-        url = lambda wildcards: config['peptides'][wildcards.reference]
+        url = lambda wildcards: config['peptides'][wildcards.peptides]
     localrule: True
     shell:
         '''
 wget -O {output.fasta} {params.url} 
         '''
 
-rule minisplice:
+rule minisplice_model:
+    output:
+        multiext('vi2-7k.kan','','.cali','.log')
+    localrule: True
+    shell:
+        '''
+wget -O- https://zenodo.org/records/15931054/files/vi2-7k.tgz | tar zxf - 
+        '''
+
+rule minisplice_predict:
     input:
-        fasta = rules.panSN_renaming.output['fasta']
+        fasta = rules.panSN_renaming.output['fasta'],
+        cali = rules.minisplice_model.output
     output:
         splicing = 'analyses/pangene/{sample}.tsv'
     threads: 8
     resources:
         mem_mb_per_cpu = 1000
-    modules:
-        'load_eth_proxy'
     shell:
         '''
-wget -O- https://zenodo.org/records/15814006/files/vi2-7k.tgz | tar -xzf - -C $TMPDIR
-
-minisplice predict -t {threads} -c $TMPDIR/vi2-7k.kan.cali $TMPDIR/vi2-7k.kan {input.fasta} > {output.splicing}
+minisplice predict -t {threads} -c {input.cali[1]} {input.cali[0]} {input.fasta[0]} > {output.splicing}
         '''
         
 rule miniprot_align:
     input:
-        fasta = rules.miniprot_index.output['index'],
-        splicing = rules.minisplice.output['splicing'],
+        fasta = rules.miniprot_index.output['index'] if config.get('miniprot_index',False) else rules.panSN_renaming.output['fasta'],
+        splicing = rules.minisplice_predict.output['splicing'],
         peptides = rules.download_annotated_peptides.output['fasta'] 
     output:
-        paf = 'analyses/pangene/{sample}.{reference}.paf.gz'
+        paf = 'analyses/pangene/{sample}.{peptides}.paf.gz'
     threads: 8
     resources:
         mem_mb_per_cpu = 5000,
@@ -59,9 +65,9 @@ pigz -p {threads} -c > {output.paf}
 
 rule pangene:
     input:
-        paf = expand(rules.miniprot_align.output['paf'],sample=determine_pangenome_samples)
+        paf = expand(rules.miniprot_align.output['paf'],sample=determine_pangenome_samples,allow_missing=True)
     output:
-        gfa = 'analyses/pangene/{graph}.{reference}.gfa'
+        gfa = 'analyses/pangene/{graph}.{peptides}.gfa'
     threads: 1
     resources:
         mem_mb_per_cpu = 5000,
@@ -75,7 +81,7 @@ rule pangene_matrix:
     input:
         gfa = rules.pangene.output['gfa']
     output:
-        tsv = 'analyses/pangene/{graph}.{reference}.tsv'
+        tsv = 'analyses/pangene/{graph}.{peptides}.tsv'
     localrule: True
     shell:
         '''
@@ -86,7 +92,7 @@ rule pangene_call:
     input:
         gfa = rules.pangene.output['gfa']
     output:
-        'analyses/pangene/{graph}.{reference}.call'
+        'analyses/pangene/{graph}.{peptides}.call'
     localrule: True
     shell:
         '''

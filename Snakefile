@@ -6,10 +6,11 @@ ALL_CHROMOSOME = list(map(str,range(1,30))) + ['X','Y','MT']
 
 wildcard_constraints:
     sample = r'[\w+\.\-_]+',
-    graph = r'|'.join(config.get('pangenomes','all')),
+    graph = r'all'+ ''.join(['|'+graph for graph in config.get('pangenomes') if graph]),
     chromosome = r'|'.join(ALL_CHROMOSOME),
     L = r'\d+',
-    reference = '|'.join(config.get('references'))
+    reference = '|'.join(config.get('references')),
+    peptides = '|'.join(config.get('peptides'))
 
 metadata = pl.read_csv(config['metadata'],infer_schema_length=10000)
 ANNOTATED_GENOMES = metadata.filter(pl.col('Reference annotation')=='Y').get_column('Filename').to_list()

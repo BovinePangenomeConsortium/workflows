@@ -29,6 +29,7 @@ seqtk cutN -n 0 {input.fasta[0]} |\
 calN50.js -L 3G - > {output}
         '''
 
+#should download database on first instance...
 rule calculate_gene_completeness:
     input:
         fasta = rules.panSN_renaming.output['fasta']
@@ -43,11 +44,11 @@ rule calculate_gene_completeness:
         runtime = '2h'
     shell:
         '''
-compleasm run -a {input.fasta[0]} -o {params._dir} -l cetartiodactyla -t {threads}
+compleasm run -a {input.fasta[0]} -o {params._dir} -l artiodactyla -t {threads}
 
-cut -f 3,2,1,11,9 {params._dir}/cetartiodactyla_odb10/full_table.tsv | sed '1d' > {output.metrics[1]}
+cut -f 3,2,1,11,9 {params._dir}/artiodactyla_odb12/full_table.tsv | sed '1d' > {output.metrics[1]}
 
-rm -rf {params._dir}/cetartiodactyla_odb10
+rm -rf {params._dir}/artiodactyla_odb12
         '''
 
 rule minimap2_reference_aligned:
@@ -74,7 +75,7 @@ rule calculate_variant_level:
         vcf = multiext('analyses/QC/reference_alignment/{sample}.{reference}.vcf.gz','','.csi')
     threads: 1
     resources:
-        mem_mb_per_cpu = 5000,
+        mem_mb_per_cpu = 7500,
         runtime = '1h'
     shell:
         '''
@@ -155,8 +156,8 @@ rule summarise_sample_metrics:
     input:
         N50 = rules.calculate_N50.output,
         completeness = rules.calculate_gene_completeness.output['metrics'],
-        variants = rules.calculate_variant_level.output['vcf'],
-        bed = rules.calculate_reference_coverage.output['bed'],
+        variants = expand(rules.calculate_variant_level.output['vcf'],reference='ARS_UCD2.0',allow_missing=True),
+        bed = expand(rules.calculate_reference_coverage.output['bed'],reference='ARS_UCD2.0',allow_missing=True),
         busco_map = config['busco_map']
     output:
         csv = 'analyses/QC/summary/{sample}.csv',
@@ -183,7 +184,7 @@ awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/
 rule summarise_all_metrics:
     input:
         metrics = expand(rules.summarise_sample_metrics.output['csv'],sample=determine_pangenome_samples),
-        vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples)
+        #vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples,reference='ARS-UCD2.0')
     output:
         metrics = 'analyses/QC_summary.{graph}.csv',
         #vcf = multiext('analyses/QC_variants.vcf.gz','','.csi')
@@ -191,4 +192,41 @@ rule summarise_all_metrics:
     shell:
         '''
 {{ echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
+        '''
+
+rule bcftools_merge:
+    input:
+        vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples,reference='ARS_UCD2.0')
+    output:
+        vcf = multiext('analyses/{graph}.vcf.gz','','.csi'),
+        stats = 'analyses/{graph}.vcf.stats'
+    threads: 4
+    resources:
+        mem_mb_per_cpu = 12500,
+        walltime = '4h'
+    shell:
+        '''
+        bcftools merge --threads {threads} -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
+        bcftools +setGT - -- -t . -n 0 |\
+        bcftools +fill-tags - -- -t AF |\
+        bcftools annotate --set-id '%VKX' -W -o {output.vcf[0]}
+
+        bcftools stats --threads {threads} -s - {output.vcf[0]} > {output.stats}
+        '''
+
+rule plink_PCA:
+    input:
+        vcf = rules.bcftools_merge.output['vcf']
+    output:
+        multiext('analyses/PCA/{graph}','.prune.in','.prune.out','.eigenval','.eigenvec')
+    params:
+        prefix = lambda wildcards, output: Path(output[1]).with_suffix('')
+    threads: 4
+    resources:
+        mem_mb = 10000
+    shell:
+        '''
+        plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8 --maf 0.1 --out {params.prefix} --snps-only --max-alleles 2
+
+        plink2 --threads {threads} --cow --vcf {input.vcf[0]} --pca --out {params.prefix} --extract {output[0]}
         '''
