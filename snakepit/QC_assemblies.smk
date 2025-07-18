@@ -220,10 +220,10 @@ rule plink_PCA:
     output:
         multiext('analyses/PCA/{graph}','.prune.in','.prune.out','.eigenval','.eigenvec')
     params:
-        prefix = lambda wildcards, output: Path(output[1]).with_suffix('')
+        prefix = lambda wildcards, output: Path(output[2]).with_suffix('')
     threads: 4
     resources:
-        mem_mb = 10000
+        mem_mb_per_cpu = 10000
     shell:
         '''
         plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8 --maf 0.1 --out {params.prefix} --snps-only --max-alleles 2
