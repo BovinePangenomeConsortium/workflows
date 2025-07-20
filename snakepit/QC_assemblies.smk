@@ -211,7 +211,7 @@ rule bcftools_merge:
         bcftools +fill-tags - -- -t AF |\
         bcftools annotate --set-id '%VKX' -W -o {output.vcf[0]}
 
-        bcftools stats --threads {threads} -s - {output.vcf[0]} > {output.stats}
+        bcftools stats --threads {threads} -s - {output.vcf[0]} | grep "^PSC" | cut -f 3,5,7-9,11 > {output.stats}
         '''
 
 rule plink_PCA:
@@ -226,7 +226,7 @@ rule plink_PCA:
         mem_mb_per_cpu = 10000
     shell:
         '''
-        plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8 --maf 0.1 --out {params.prefix} --snps-only --max-alleles 2
+        plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8 --make-pgen --out {params.prefix} --snps-only --max-alleles 2
 
-        plink2 --threads {threads} --cow --vcf {input.vcf[0]} --pca --out {params.prefix} --extract {output[0]}
+        plink2 --threads {threads} --cow --pfile {input.vcf[0]} --pca --maf 0.1 --out {params.prefix} --extract {output[0]}
         '''
