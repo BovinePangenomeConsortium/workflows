@@ -7,7 +7,7 @@ wildcard_constraints:
     segment_length = r'\d+',
     chromosome = r'\d+|X|Y|MT',
     k = r'\d+',
-    POA = r'asm(5|10|20)'
+    POA = r'asm(5|10|15|20)'
 
 rule wfmash_index:
     input:
@@ -164,7 +164,7 @@ rule smoothxg:
         block_id_min = lambda wildcards: round(float(wildcards.p) / 100,4),
         n_haps = lambda wildcards, input: sum(1 for _ in open(input.fasta[1])),
         POA_pad_depth = lambda wildcards, input: 100 * sum(1 for _ in open(input.fasta[1])),
-        POA_lengths = '700,900,1100',
+        POA_lengths = '700,1100',
         POA_params = POA_params
     threads: 12
     resources:
