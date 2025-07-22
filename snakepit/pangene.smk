@@ -74,7 +74,11 @@ rule pangene:
         runtime = '1h'
     shell:
         '''
-pangene {input.paf} > {output.gfa} 
+for F in {input.paf}
+do
+  zgrep -vhP "#(X|Y|MT|unplaced)#" $F | pigz -c > $TMPDIR/$(basename $F)
+done
+pangene $TMPDIR/*paf.gz > {output.gfa}
         '''
 
 rule pangene_matrix:
