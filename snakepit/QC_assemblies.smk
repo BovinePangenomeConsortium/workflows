@@ -206,10 +206,11 @@ rule bcftools_merge:
         walltime = '4h'
     shell:
         '''
-        bcftools merge --threads {threads} -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
-        bcftools +setGT - -- -t . -n 0 |\
-        bcftools +fill-tags - -- -t AF |\
-        bcftools annotate --set-id '%VKX' -W -o {output.vcf[0]}
+        bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
+        bcftools +setGT --threads {threads} -Ou - -- -t . -n 0 |\
+        bcftools norm --threads {threads} -Ou -m-any |\
+        bcftools +fill-tags --threads {threads} -Ou - -- -t AF |\
+        bcftools annotate --threads {threads} --set-id '%VKX' -W -o {output.vcf[0]}
 
         bcftools stats --threads {threads} -s - {output.vcf[0]} | grep "^PSC" | cut -f 3,5,7-9,11 > {output.stats}
         '''
