@@ -40,6 +40,7 @@ include: 'snakepit/minigraph.smk'
 include: 'snakepit/pggb.smk'
 include: 'snakepit/pangene.smk'
 include: 'snakepit/pangenome_alignment.smk'
+include: 'snakepit/centomeres.smk'
 
 rule all:
     input:
