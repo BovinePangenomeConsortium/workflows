@@ -22,14 +22,14 @@ rule ragtag_scaffold:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
         _dir = lambda wildcards, output: PurePath(output[0]).parent,
-        mm2_opt = '-x asm20',
+        mm2_opt = '--cs -cxasm10',
         exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})",
         remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in ANNOTATED_GENOMES else ''
     conda: 'RagTag'
     threads: 6
     resources:
-        mem_mb_per_cpu = 12000,
-        runtime = '2h'
+        mem_mb_per_cpu = 10000,
+        runtime = '4h'
     shell:
         '''
 grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR/unplaced.txt
@@ -48,13 +48,11 @@ def map_ID_to_filename(sample):
 
     return filename_map[sample]
 
+#TODO: need to convert the P lines later in pggb to vg format [start-end] rather than :start-end
 def panSN_naming_schema(sample):
     haplotype = metadata.filter(pl.col('Filename')==sample).get_column('Haplotype').to_list()[0]
     animal_ID = metadata.filter(pl.col('Filename')==sample).get_column('Animal ID').to_list()[0]
-    naming = f'">{animal_ID}#{haplotype}#"$1'
-    if False and sample not in ANNOTATED_GENOMES:
-        naming += '":"$2"-"$3'
-        #naming += '"#"C[$1]-1'
+    naming = f'">{animal_ID}#{haplotype}#"$1"["$2"-"$3"]"'
     return naming
 
 rule panSN_renaming:
@@ -110,7 +108,7 @@ rule panSN_split:
         '''
 for C in {{1..29}}
 do
-  samtools faidx  --write-index -r <(grep -P "#$C{params.regex}\\s" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
+  samtools faidx  --write-index -r <(grep -P "#$C:" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
 done
         '''
 

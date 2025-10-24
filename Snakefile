@@ -17,7 +17,7 @@ ANNOTATED_GENOMES = metadata.filter(pl.col('Reference annotation')=='Y').get_col
 
 ALL_CHROMOSOME = list(map(str,range(1,30))) + ['X','Y','MT']
 
-alignment_metadata = pl.read_csv(config['alignment_metadata'],infer_schema_length=10000)
+alignment_metadata = pl.read_csv(config['alignment_metadata'],infer_schema_length=10000) if 'alignment_metadata' in config else pl.DataFrame()
 
 def determine_pangenome_samples(wildcards):
     try:
@@ -36,13 +36,13 @@ def determine_pangenome_samples(wildcards):
 
 include: 'snakepit/pangenome.smk'
 include: 'snakepit/QC_assemblies.smk'
-include: 'snakepit/minigraph.smk'
-include: 'snakepit/pggb.smk'
-include: 'snakepit/pangene.smk'
-include: 'snakepit/pangenome_alignment.smk'
-include: 'snakepit/centomeres.smk'
+#include: 'snakepit/minigraph.smk'
+#include: 'snakepit/pggb.smk'
+#include: 'snakepit/pangene.smk'
+#include: 'snakepit/pangenome_alignment.smk'
+#include: 'snakepit/centomeres.smk'
 
 rule all:
     input:
         'analyses/QC_summary.all.csv',
-        expand('analyses/pggb/medium_test/p95_s5000/{chromosome}.k31.POAasm20.unchop.graph.png',chromosome=ALL_CHROMOSOME)
+        #expand('analyses/pggb/medium_test/p95_s5000/{chromosome}.k31.POAasm20.unchop.graph.png',chromosome=ALL_CHROMOSOME)

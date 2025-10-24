@@ -29,10 +29,20 @@ seqtk cutN -n 0 {input.fasta[0]} |\
 calN50.js -L 3G - > {output}
         '''
 
-#should download database on first instance...
+rule compleasm_download:
+    output:
+        directory('analyses/QC/completeness/{lineage}_odb12')
+    localrule: True
+    conda: 'compleasm'
+    shell:
+        '''
+        compleasm download {wildcards.lineage} -L {output}
+        '''
+
 rule calculate_gene_completeness:
     input:
-        fasta = rules.panSN_renaming.output['fasta']
+        fasta = rules.panSN_renaming.output['fasta'],
+        db = expand(rules.compleasm_download.output,lineage='artiodactyla')
     output:
         metrics = expand('analyses/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
     params:
@@ -69,7 +79,8 @@ pigz -p {threads} -c > {output}
 
 rule calculate_variant_level:
     input:
-        paf = rules.minimap2_reference_aligned.output,
+        paf = rules.ragtag_scaffold.output[5],
+        #paf = rules.minimap2_reference_aligned.output,
         reference = lambda wildcards: config['references'][wildcards.reference]
     output:
         vcf = multiext('analyses/QC/reference_alignment/{sample}.{reference}.vcf.gz','','.csi')
@@ -79,8 +90,7 @@ rule calculate_variant_level:
         runtime = '1h'
     shell:
         '''
-pigz -p 2 -dc {input.paf} |\
-sort -k6,6 -k8,8n |\
+sort -k6,6 -k8,8n {input.paf} |\
 paftools.js call -f {input.reference} -s {wildcards.sample} - |\
 bcftools view --write-index -o {output.vcf[0]}
         '''
@@ -133,7 +143,8 @@ paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' 
 
 rule calculate_reference_coverage:
     input:
-        paf = rules.minimap2_reference_aligned.output,
+        paf = rules.ragtag_scaffold.output[5],
+        #paf = rules.minimap2_reference_aligned.output,
         fai = lambda wildcards: f"{config['references'][wildcards.reference]}.fai"
     output:
         bed = 'analyses/QC/reference_alignment/{sample}.{reference}.covered.bed'
@@ -143,8 +154,7 @@ rule calculate_reference_coverage:
         runtime = '30m'
     shell:
         '''
-pigz -p 2 -dc {input.paf} |\
-cut -f 6,8,9 |\
+cut -f 6,8,9 {input.paf} |\
 bedtools sort -faidx {input.fai} -i /dev/stdin |\
 bedtools merge -d 0 -i /dev/stdin |\
 bedtools genomecov -g {input.fai} -i /dev/stdin |\
