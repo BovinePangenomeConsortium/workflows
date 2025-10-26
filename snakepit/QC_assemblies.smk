@@ -54,7 +54,7 @@ rule calculate_gene_completeness:
         runtime = '2h'
     shell:
         '''
-compleasm run -a {input.fasta[0]} -o {params._dir} -l artiodactyla -t {threads}
+compleasm run -a {input.fasta[0]} -o {params._dir} -l artiodactyla -L {input.db} -t {threads}
 
 cut -f 3,2,1,11,9 {params._dir}/artiodactyla_odb12/full_table.tsv | sed '1d' > {output.metrics[1]}
 
