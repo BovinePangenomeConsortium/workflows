@@ -22,7 +22,7 @@ rule ragtag_scaffold:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
         _dir = lambda wildcards, output: PurePath(output[0]).parent,
-        mm2_opt = '--cs -cxasm10',
+        mm2_opt = '--cs -c -x asm10',
         exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})",
         remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in ANNOTATED_GENOMES else ''
     conda: 'RagTag'
@@ -49,10 +49,17 @@ def map_ID_to_filename(sample):
     return filename_map[sample]
 
 #TODO: need to convert the P lines later in pggb to vg format [start-end] rather than :start-end
-def panSN_naming_schema(sample):
+def panSN_naming_schema(sample, schema='cactus'):
     haplotype = metadata.filter(pl.col('Filename')==sample).get_column('Haplotype').to_list()[0]
     animal_ID = metadata.filter(pl.col('Filename')==sample).get_column('Animal ID').to_list()[0]
-    naming = f'">{animal_ID}#{haplotype}#"$1"["$2"-"$3"]"'
+    naming = f'">{animal_ID}#{haplotype}#"$1'
+    match schema:
+        case 'cactus':
+            naming += '":"$2"-"$3'
+        case 'vg':
+            naming += '"["$2"-"$3"]"'
+        case '_':
+            naming += '"_"$2"-"$3'
     return naming
 
 rule panSN_renaming:

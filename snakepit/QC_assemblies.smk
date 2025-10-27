@@ -22,7 +22,7 @@ rule calculate_N50:
     output:
         'analyses/QC/contiguity/{sample}.N50'
     resources:
-        runtime = '10m'
+        runtime = '30m'
     shell:
         '''
 seqtk cutN -n 0 {input.fasta[0]} |\
@@ -51,7 +51,7 @@ rule calculate_gene_completeness:
     threads: 4
     resources:
         mem_mb_per_cpu = 12500,
-        runtime = '2h'
+        runtime = '4h'
     shell:
         '''
 compleasm run -a {input.fasta[0]} -o {params._dir} -l artiodactyla -L {input.db} -t {threads}
@@ -213,7 +213,7 @@ rule bcftools_merge:
     threads: 4
     resources:
         mem_mb_per_cpu = 12500,
-        walltime = '4h'
+        walltime = '24h'
     shell:
         '''
         bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
@@ -239,5 +239,5 @@ rule plink_PCA:
         '''
         plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8 --make-pgen --out {params.prefix} --snps-only --max-alleles 2
 
-        plink2 --threads {threads} --cow --pfile {input.vcf[0]} --pca --maf 0.1 --out {params.prefix} --extract {output[0]}
+        plink2 --threads {threads} --cow --pfile {params.prefix} --pca --maf 0.1 --out {params.prefix} --extract {output[0]}
         '''
