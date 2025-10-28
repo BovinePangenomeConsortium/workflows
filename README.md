@@ -3,6 +3,16 @@
 This is the home for pipelines related to the [Bovine Pangenome Consortium](https://bovinepangenomeconsortium.github.io/).
 This is a work in progress, but reach out if you have any questions!
 
+
+### Unpacking the genomes
+
+The genome archive can be unpacked with [agc](https://github.com/refresh-bio/agc), writing out all (compressed) assemblies to a given folder
+
+```
+mkdir -p agc
+agc getcol -g 5 -o agc -t 4 -f BPC.agc
+```
+
 ### Assessing assembly quality
 
 We need to get a rough idea of how well assembled these genomes are, but for many samples we only have the assembly itself, not the raw data.
