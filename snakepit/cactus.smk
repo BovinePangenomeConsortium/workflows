@@ -1,6 +1,7 @@
 # very stripped back version of https://github.com/harvardinformatics/cactus-snakemake/blob/main/cactus_minigraph.smk
 # TODO: optimize resource usage and add more config options
-# TODO: check on split and gather steps
+import re
+
 
 rule all:
     input:
@@ -37,7 +38,7 @@ $TMPDIR/minigraph \
 '''
 
 
-# bottleneck is parallel
+# bottleneck is parallel?
 rule cactus_graphmap:
     input:
         seqfile=ancient(rules.cactus_copy_seqfile.output["seqfile"]),
@@ -75,7 +76,7 @@ checkpoint cactus_split:
     output:
         split_dir=directory("cactus/{graph}/split"),
         chromfile="cactus/{graph}/split/chromfile.txt"
-    threads: 8
+    threads: 4
     resources:
         mem_mb_per_cpu=10000,
         runtime="4h"
@@ -115,9 +116,6 @@ $TMPDIR/align \
 '''
 
 
-import re
-
-
 def gather_alignments(wildcards):
     with checkpoints.cactus_split.get(**wildcards).output.chromfile.open() as f:
         return sorted(
@@ -125,25 +123,23 @@ def gather_alignments(wildcards):
             key=lambda s: [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)],
         )
 
-
-# TODO: upgrade other references here?
+#TODO: what is wave output?
+#TODO: add VCF outputs
 rule cactus_join:
     input:
         vg=gather_alignments
     output:
         multiext(
             "cactus/{graph}/{graph}",
-            hal=".full.hal",
-            gfa=".gfa.gz",
-            vcf=".vcf.gz",
-            vcf_index=".vcf.gz.tbi",
-            gbz=".gbz",
-            raw_vcf=".raw.vcf.gz",
-            raw_vcf_index=".raw.vcf.gz.tbi",
+            gfa_full=".full.unchopped.gfa.gz",
+            gfa_clip="clip.unchopped.gfa.gz",
+            gbz_full=".full.gbz",
+            gbz_clip="clip.gbz",
             stats=".stats.tgz",
         )
     params:
-        out_dir=lambda wildcards, output: Path(output[0]).parent
+        out_dir=lambda wildcards, output: Path(output[0]).parent,
+        references = " ".join(config.get("additional_references", []))
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
@@ -155,7 +151,7 @@ $TMPDIR/join \
 --vg {input.vg} \
 --outDir {params.out_dir} \
 --outName {wildcards.graph} \
---reference {config[reference_ID]} \
+--reference {config[reference_ID]} {params.references} \
 --unchopped-gfa full clip \
 --gbz full clip \
 --vcfwave \
