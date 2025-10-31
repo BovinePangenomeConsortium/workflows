@@ -6,46 +6,51 @@ import polars as pl
 
 rule all:
     input:
-        "cactus/all/all.gfa.gz"
+        "cactus/all/all.gfa.gz",
+
 
 rule cactus_make_seqfile:
     input:
-        metadata = config['metadata']
+        metadata=config["metadata"],
     output:
-        seqfile = 'cactus/{graphs}/seqfile.tsv'
+        seqfile="cactus/{graphs}/seqfile.tsv",
     localrule: True
     run:
-        metadata = pl.read_csv(input.metadata,infer_schema_length=10000)
-        with open(output.seqfile,'w') as fout:
+        metadata = pl.read_csv(input.metadata, infer_schema_length=10000)
+        with open(output.seqfile, "w") as fout:
             for row in metadata.iter_rows(named=True):
-                fout.write(f"{row["Animal ID"]}.{row["Haplotype"]}\tagc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}fa.gz\n")
+                fout.write(
+                    f"{row["Animal ID"]}.{row["Haplotype"]}\tagc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}fa.gz\n"
+                )
 
 
 # bottleneck is sequential
 rule cactus_minigraph:
     input:
-        seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"])
+        seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
     output:
-        gfa="cactus/{graph}/sv.gfa"
+        gfa="cactus/{graph}/sv.gfa",
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
-        runtime="4h"
-    container: config["cactus_image"]
-    shell: '''
+        runtime="4h",
+    container:
+        config["cactus_image"]
+    shell:
+        """
 cactus-minigraph \
 $TMPDIR/minigraph \
 {input.seqfile} \
 {output.gfa} \
 --reference {config[reference_ID]}
-'''
+"""
 
 
 # bottleneck is parallel?
 rule cactus_graphmap:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
-        gfa=rules.cactus_minigraph.output.gfa
+        gfa=rules.cactus_minigraph.output.gfa,
     output:
         multiext(
             "cactus/{graph}/graphmap",
@@ -54,13 +59,15 @@ rule cactus_graphmap:
             gaf=".gaf.gz",
             paf_filter_log=".paf.filter.log",
             paf_unfiltered=".paf.unfiltered.gz",
-        )
+        ),
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
-        runtime="4h"
-    container: config["cactus_image"]
-    shell: '''
+        runtime="4h",
+    container:
+        config["cactus_image"]
+    shell:
+        """
 cactus-graphmap \
 $TMPDIR/graphmap \
 {input.seqfile} \
@@ -68,23 +75,25 @@ $TMPDIR/graphmap \
 {output.paf} \
 --outputFasta {output.fasta} \
 --reference {config[reference_ID]}
-'''
+"""
 
 
 checkpoint cactus_split:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
         gfa=rules.cactus_minigraph.output.gfa,
-        paf=rules.cactus_graphmap.output.paf
+        paf=rules.cactus_graphmap.output.paf,
     output:
         split_dir=directory("cactus/{graph}/split"),
-        chromfile="cactus/{graph}/split/chromfile.txt"
+        chromfile="cactus/{graph}/split/chromfile.txt",
     threads: 4
     resources:
         mem_mb_per_cpu=10000,
-        runtime="4h"
-    container: config["cactus_image"]
-    shell: '''
+        runtime="4h",
+    container:
+        config["cactus_image"]
+    shell:
+        """
 cactus-graphmap-split \
 $TMPDIR/split \
 {input.seqfile} \
@@ -92,22 +101,24 @@ $TMPDIR/split \
 {input.paf} \
 --outDir {output.split_dir} \
 --reference {config[reference_ID]}
-'''
+"""
 
 
 # per chromosome bottleneck
 rule cactus_align:
     input:
         seqfile="cactus/{graph}/split/seqfiles/{contig}.seqfile",
-        paf="cactus/{graph}/split/{contig}/{contig}.paf"
+        paf="cactus/{graph}/split/{contig}/{contig}.paf",
     output:
-        multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg")
+        multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
-        runtime="4h"
-    container: config["cactus_image"]
-    shell: '''
+        runtime="4h",
+    container:
+        config["cactus_image"]
+    shell:
+        """
 cactus-align \
 $TMPDIR/align \
 {input.seqfile} \
@@ -116,21 +127,23 @@ $TMPDIR/align \
 --pangenome \
 --reference {config[reference_ID]} \
 --outVG
-'''
+"""
 
 
 def gather_alignments(wildcards):
     with checkpoints.cactus_split.get(**wildcards).output.chromfile.open() as f:
         return sorted(
             [f"cactus/{{graph}}/align/{row.split('\t')[0]}.vg" for row in f],
-            key=lambda s: [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)],
+            key=lambda s: [
+                int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)
+            ],
         )
 
 
-#TODO: add VCF outputs
+# TODO: add VCF outputs
 rule cactus_join:
     input:
-        vg=gather_alignments
+        vg=gather_alignments,
     output:
         multiext(
             "cactus/{graph}/{graph}",
@@ -139,16 +152,18 @@ rule cactus_join:
             gbz_full=".full.gbz",
             gbz_clip=".clip.gbz",
             stats=".stats.tgz",
-        )
+        ),
     params:
         out_dir=lambda wildcards, output: Path(output[0]).parent,
-        references = " ".join(config.get("additional_references", []))
+        references=" ".join(config.get("additional_references", [])),
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
-        runtime="4h"
-    container: config["cactus_image"]
-    shell: '''
+        runtime="4h",
+    container:
+        config["cactus_image"]
+    shell:
+        """
 cactus-graphmap-join \
 $TMPDIR/join \
 --vg {input.vg} \
@@ -159,4 +174,4 @@ $TMPDIR/join \
 --gbz full clip \
 --vcfwave \
 --vcf full clip
-'''
+"""
