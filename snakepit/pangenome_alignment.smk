@@ -81,7 +81,7 @@ rule vg_autoindex:
     output:
         gbz = multiext('analyses/giraffe/{graph}/p{p}_s{segment_length}/whole_genome.k{k}.POA{POA}.unchop','.dist','.giraffe.gbz','.longread.zipcodes','.longread.withzip.min','.shortread.zipcodes','.shortread.withzip.min')
     params:
-        prefix = lambda wildcards, output: PurePath(output.gbz[0]).with_suffix('')
+        prefix = lambda wildcards, output: Path(output.gbz[0]).with_suffix('')
     threads: 1
     resources:
         mem_mb_per_cpu = 150000,
@@ -104,7 +104,7 @@ rule kmc_count:
     output:
         kff = 'analyses/giraffe/kmers/{sample}.kff'
     params:
-        prefix = lambda wildcards, output: PurePath(output['kff']).with_suffix('')
+        prefix = lambda wildcards, output: Path(output['kff']).with_suffix('')
     threads: 4
     resources:
         mem_mb_per_cpu = 8000,

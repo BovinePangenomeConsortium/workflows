@@ -21,7 +21,7 @@ rule ragtag_scaffold:
     output:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
-        _dir = lambda wildcards, output: PurePath(output[0]).parent,
+        _dir = lambda wildcards, output: Path(output[0]).parent,
         mm2_opt = '--cs -c -x asm10',
         exclude_unplaced = f"^({'|'.join(list(map(str,range(1,30))) + ['X','Y','MT'])})",
         remove_small = lambda wildcards: '--remove-small -f 10000000' if wildcards.sample in ANNOTATED_GENOMES else ''
@@ -106,7 +106,7 @@ rule panSN_split:
         fasta = expand('data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=list(map(str,range(1,30))))
     params:
         regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d',
-        _out = lambda wildcards, output: PurePath(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
+        _out = lambda wildcards, output: Path(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,
@@ -127,7 +127,7 @@ rule panSN_split2:
         fasta = expand('data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}',ext=('','.fai','.gzi'),chromosome=('X','Y','MT'))
     params:
         regex = lambda wildcards: '' if wildcards.sample in ANNOTATED_GENOMES else r'#\d',
-        _out = lambda wildcards, output: PurePath(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
+        _out = lambda wildcards, output: Path(output['fasta'][0]).with_suffix('').with_suffix('').with_suffix('')
     threads: 1
     resources:
         mem_mb_per_cpu = 2500,

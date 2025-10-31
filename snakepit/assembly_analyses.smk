@@ -1,7 +1,7 @@
 config['reference'] = '/cluster/work/pausch/inputs/ref/BTA/UCD2.0/GCA_002263795.4_ARS-UCD2.0_genomic.fa'
 
 import polars as pl
-from pathlib import PurePath
+from pathlib import Path
 
 def get_samples():
     metadata = pl.read_csv('summary.csv')#'£samplesheet_20240628.csv')
@@ -57,7 +57,7 @@ rule ragtag_scaffold:
     output:
         multiext('analyses/scaffolding/{reference}/{sample}/ragtag.scaffold','.agp','.fasta','.err','.confidence.txt','.stats','.asm.paf','.asm.paf.log')
     params:
-        _dir = lambda wildcards, output: PurePath(output[0]).parent,
+        _dir = lambda wildcards, output: Path(output[0]).parent,
         mm2_opt = '-x asm10'
     threads: 6
     resources:

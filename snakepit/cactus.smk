@@ -1,27 +1,30 @@
 # very stripped back version of https://github.com/harvardinformatics/cactus-snakemake/blob/main/cactus_minigraph.smk
 # TODO: optimize resource usage and add more config options
 import re
+import polars as pl
 
 
 rule all:
     input:
         "cactus/all/all.gfa.gz"
 
-rule cactus_copy_seqfile:
+rule cactus_make_seqfile:
     input:
-        seqfile=config["seq_file"]
+        metadata = config['metadata']
     output:
-        seqfile="cactus/{graph}/seqfile.txt"
+        seqfile = 'cactus/{graphs}/seqfile.tsv'
     localrule: True
-    shell: '''
-cp {input.seqfile} {output.seqfile}
-'''
+    run:
+        metadata = pl.read_csv(input.metadata,infer_schema_length=10000)
+        with open(output.seqfile,'w') as fout:
+            for row in metadata.iter_rows(named=True):
+                fout.write(f"{row["Animal ID"]}.{row["Haplotype"]}\tagc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}fa.gz\n")
 
 
 # bottleneck is sequential
 rule cactus_minigraph:
     input:
-        seqfile=config["seq_file"]
+        seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"])
     output:
         gfa="cactus/{graph}/sv.gfa"
     threads: 8
@@ -41,7 +44,7 @@ $TMPDIR/minigraph \
 # bottleneck is parallel?
 rule cactus_graphmap:
     input:
-        seqfile=ancient(rules.cactus_copy_seqfile.output["seqfile"]),
+        seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
         gfa=rules.cactus_minigraph.output.gfa
     output:
         multiext(
@@ -70,7 +73,7 @@ $TMPDIR/graphmap \
 
 checkpoint cactus_split:
     input:
-        seqfile=ancient(rules.cactus_copy_seqfile.output["seqfile"]),
+        seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
         gfa=rules.cactus_minigraph.output.gfa,
         paf=rules.cactus_graphmap.output.paf
     output:
@@ -123,7 +126,7 @@ def gather_alignments(wildcards):
             key=lambda s: [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)],
         )
 
-#TODO: what is wave output?
+
 #TODO: add VCF outputs
 rule cactus_join:
     input:
@@ -132,9 +135,9 @@ rule cactus_join:
         multiext(
             "cactus/{graph}/{graph}",
             gfa_full=".full.unchopped.gfa.gz",
-            gfa_clip="clip.unchopped.gfa.gz",
+            gfa_clip=".clip.unchopped.gfa.gz",
             gbz_full=".full.gbz",
-            gbz_clip="clip.gbz",
+            gbz_clip=".clip.gbz",
             stats=".stats.tgz",
         )
     params:

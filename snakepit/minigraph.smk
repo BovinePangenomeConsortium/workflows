@@ -4,7 +4,7 @@ rule mash_sketch:
     output:
         sketch = 'analyses/minigraph/mash/{sample}.msh'
     params:
-        prefix = lambda wildcards, output: PurePath(output['sketch']).with_suffix('')
+        prefix = lambda wildcards, output: Path(output['sketch']).with_suffix('')
     threads: 2
     resources:
         mem_per_cpu_mb = 2500,

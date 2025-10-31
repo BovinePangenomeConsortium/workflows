@@ -46,7 +46,7 @@ rule calculate_gene_completeness:
     output:
         metrics = expand('analyses/QC/completeness/compleasm_{{sample}}/{result}',result=('summary.txt','full_table.tsv'))
     params:
-        _dir = lambda wildcards, output: PurePath(output['metrics'][0]).parent
+        _dir = lambda wildcards, output: Path(output['metrics'][0]).parent
     conda: 'compleasm'
     threads: 4
     resources:
@@ -162,27 +162,26 @@ awk -v OFS='\\t' '$2==0 {{A[$1]; U[$1]=$5; next}} {{A[$1];C[$1]=$5}} END {{for (
 sort -k1,1V > {output.bed}
         '''
 
+#awk 'NR==FNR {{loc[$1]=$2;next}} {{++C[loc[$1]][$2]}} END {{ for (k in C) {{ print k,C[k]["Single"]?C[k]["Single"]:0,C[k]["Duplicated"]?C[k]["Duplicated"]:0,C[k]["Missing"]?C[k]["Missing"]:0 }} }}' {input.busco_map} {input.completeness[1]} > {output.busco}
+#awk '$1~/[[:digit:]]/ {{s+=$2;d+=$3;m+=$4;next}} {{S[$1]=$2;D[$1]=$3;M[$1]=$4}} END {{printf s","d","m","S["X"]","D["X"]","M["X"]","S["Y"]","D["Y"]","M["Y"]","}}' {output.busco} >> {output.csv}
+
 rule summarise_sample_metrics:
     input:
         N50 = rules.calculate_N50.output,
-        completeness = rules.calculate_gene_completeness.output['metrics'],
+        busco = rules.calculate_gene_completeness.output['metrics'][0],
         variants = expand(rules.calculate_variant_level.output['vcf'],reference='ARS_UCD2.0',allow_missing=True),
-        bed = expand(rules.calculate_reference_coverage.output['bed'],reference='ARS_UCD2.0',allow_missing=True),
-        busco_map = config['busco_map']
+        bed = expand(rules.calculate_reference_coverage.output['bed'],reference='ARS_UCD2.0',allow_missing=True)
     output:
-        csv = 'analyses/QC/summary/{sample}.csv',
-        busco = 'analyses/QC/completeness/{sample}.csv'
+        csv = 'analyses/QC/summary/{sample}.csv'
     resources:
-        runtime = '10m'
+        runtime = '20m'
     shell:
         '''
 echo -n "{wildcards.sample}," > {output.csv}
 
 awk '$1~/(SZ|NN)/ {{printf $2",";next}} {{if ($1=="NL"&&$2==50) {{printf $3","}} }}' {input.N50} >> {output.csv}
 
-awk 'NR==FNR {{loc[$1]=$2;next}} {{++C[loc[$1]][$2]}} END {{ for (k in C) {{ print k,C[k]["Single"]?C[k]["Single"]:0,C[k]["Duplicated"]?C[k]["Duplicated"]:0,C[k]["Missing"]?C[k]["Missing"]:0 }} }}' {input.busco_map} {input.completeness[1]} > {output.busco}
-
-awk '$1~/[[:digit:]]/ {{s+=$2;d+=$3;m+=$4;next}} {{S[$1]=$2;D[$1]=$3;M[$1]=$4}} END {{printf s","d","m","S["X"]","D["X"]","M["X"]","S["Y"]","D["Y"]","M["Y"]","}}' {output.busco} >> {output.csv}
+awk 'NR>1&&NR<8 {{printf $2";"}}' {input.busco} | sed 's/;;$/,/' >> {output.csv}
 
 bcftools stats {input.variants[0]} | awk '$1=="SN"&&$5~/(SNPs|indels)/ {{printf $6","}}' >> {output.csv}
 
@@ -194,7 +193,6 @@ awk -v OFS=',' '$1~/^[[:digit:]]/ {{A+=$2;++n;next}} {{B[$1]=$2}} END {{print A/
 rule summarise_all_metrics:
     input:
         metrics = expand(rules.summarise_sample_metrics.output['csv'],sample=determine_pangenome_samples),
-        #vcf = expand(rules.calculate_variant_level.output['vcf'][0],sample=determine_pangenome_samples,reference='ARS-UCD2.0')
     output:
         metrics = 'analyses/QC_summary.{graph}.csv',
         #vcf = multiext('analyses/QC_variants.vcf.gz','','.csi')
