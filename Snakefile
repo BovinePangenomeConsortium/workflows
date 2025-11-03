@@ -24,7 +24,7 @@ graph_choices = (
 
 wildcard_constraints:
     sample=r"[\w+\.\-_]+",
-    graph=r"|".join(graph_choices),
+    graph=r"|".join(["every"]+graph_choices),
     chromosome=r"|".join(ALL_CHROMOSOME),
     L=r"\d+",
     reference="|".join(config.get("references")),
@@ -50,8 +50,8 @@ alignment_metadata = (
 def determine_pangenome_samples(wildcards):
     try:
         match wildcards.graph:
-            case (
-                "n=1 Cattle" | "Cattle" | "All"
+            case ( #can I capture all cases based on graph_choices?
+                "Cattle_n1" | "Cattle" | "All"
             ):  # Note does not include QC fails in "all"
                 subset = metadata.filter(
                     pl.col("Graphs").str.split(";").list.contains(wildcards.graph)
@@ -66,7 +66,7 @@ def determine_pangenome_samples(wildcards):
                     (pl.col("Species") == "Bos taurus")
                     & (pl.col("Subspecies representative") == "Y")
                 )
-            case "all":
+            case "every":
                 subset = metadata
             case _:
                 subset = metadata

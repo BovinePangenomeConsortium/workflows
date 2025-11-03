@@ -230,7 +230,7 @@ rule summarise_all_metrics:
     localrule: True
     shell:
         """
-{{ echo "sample,genome size,N contigs,NG50,autosome single copy,autosome duplicated copy,autosome missing copy,X single copy,X duplicated copy,X missing copy,Y single copy,Y duplicated copy,Y missing copy,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
+{{ echo "sample,genome size,N contigs,NG50,BUSCOs,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered" ;  cat {input.metrics} ; }} > {output.metrics}
         """
 
 

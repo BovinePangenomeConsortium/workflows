@@ -6,25 +6,30 @@ import polars as pl
 
 rule all:
     input:
-        "cactus/all/all.gfa.gz",
+        "cactus/every/genome.full.gbz"
 
 
 rule cactus_make_seqfile:
     input:
         metadata=config["metadata"],
     output:
-        seqfile="cactus/{graphs}/seqfile.tsv",
+        seqfile="cactus/{graph}/seqfile.tsv",
     localrule: True
     run:
         metadata = pl.read_csv(input.metadata, infer_schema_length=10000)
+        if wildcards.graph == "every":
+            subset = metadata
+        else:
+            subset = metadata.filter(
+                pl.col("Graphs").str.split(";").list.contains(wildcards.graph)
+            )
         with open(output.seqfile, "w") as fout:
-            for row in metadata.iter_rows(named=True):
+            for row in subset.iter_rows(named=True):
                 fout.write(
-                    f"{row["Animal ID"]}.{row["Haplotype"]}\tagc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}fa.gz\n"
+                    f"{row["Animal ID"]}.{row["Haplotype"]}\tdata/agc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}.fa.gz\n"
                 )
 
 
-# bottleneck is sequential
 rule cactus_minigraph:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
@@ -46,7 +51,7 @@ $TMPDIR/minigraph \
 """
 
 
-# bottleneck is parallel?
+# Default cactus params use 6 threads per minigraph job
 rule cactus_graphmap:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
@@ -60,9 +65,9 @@ rule cactus_graphmap:
             paf_filter_log=".paf.filter.log",
             paf_unfiltered=".paf.unfiltered.gz",
         ),
-    threads: 8
+    threads: 18
     resources:
-        mem_mb_per_cpu=10000,
+        mem_mb_per_cpu=5000,
         runtime="4h",
     container:
         config["cactus_image"]
@@ -86,9 +91,9 @@ checkpoint cactus_split:
     output:
         split_dir=directory("cactus/{graph}/split"),
         chromfile="cactus/{graph}/split/chromfile.txt",
-    threads: 4
+    threads: 2
     resources:
-        mem_mb_per_cpu=10000,
+        mem_mb_per_cpu=20000,
         runtime="4h",
     container:
         config["cactus_image"]
@@ -104,14 +109,13 @@ $TMPDIR/split \
 """
 
 
-# per chromosome bottleneck
 rule cactus_align:
     input:
         seqfile="cactus/{graph}/split/seqfiles/{contig}.seqfile",
         paf="cactus/{graph}/split/{contig}/{contig}.paf",
     output:
         multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
-    threads: 8
+    threads: 4
     resources:
         mem_mb_per_cpu=10000,
         runtime="4h",
@@ -146,7 +150,7 @@ rule cactus_join:
         vg=gather_alignments,
     output:
         multiext(
-            "cactus/{graph}/{graph}",
+            "cactus/{graph}/genome",
             gfa_full=".full.unchopped.gfa.gz",
             gfa_clip=".clip.unchopped.gfa.gz",
             gbz_full=".full.gbz",
