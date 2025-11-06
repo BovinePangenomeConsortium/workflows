@@ -24,6 +24,19 @@ rule download_annotated_peptides:
 wget -O {output.fasta} {params.url} 
         """
 
+rule cd_hit_collapse_genes:
+    input:
+        peptides=rules.download_annotated_peptides.output["fasta"]
+    output:
+        multiext("analyses/pangene/peptides/{peptides}.pep",peptides=".clustered.fa",clusters=".clustered.fa.clstr")
+    threads: 2
+    resources:
+        mem_mb_per_cpu=2500,
+        runtime="30m",
+    shell:
+        """
+cd-hit -i {input.peptides} -o {outptu.peptides} -c 0.9 -aS 0.8 -n 5 -T {threads} -g
+        """
 
 rule minisplice_model:
     output:
@@ -58,9 +71,9 @@ rule miniprot_align:
             else rules.panSN_renaming.output["fasta"]
         ),
         splicing=rules.minisplice_predict.output["splicing"],
-        peptides=rules.download_annotated_peptides.output["fasta"],
+        peptides=lambda wildcards: rules.cd_hit_collapse_genes.output["peptides"] if wildcards.clustered == "clustered" else rules.download_annotated_peptides.output["fasta"],
     output:
-        paf="analyses/pangene/{sample}.{peptides}.paf.gz",
+        paf="analyses/pangene/{sample}.{peptides}.{clustered}.paf.gz",
     threads: 8
     resources:
         mem_mb_per_cpu=5000,
@@ -72,6 +85,10 @@ pigz -p {threads} -c > {output.paf}
         """
 
 
+#TODO: check regex works correctly for new panSN
+#TODO: can we drop the pigz and just use uncompressed?
+#TODO: can build regex-based graphs (autosomes, X, Y, MT) etc
+#TODO: use custom pangene to read panSN names rather than filename?
 rule pangene:
     input:
         paf=expand(
@@ -80,7 +97,9 @@ rule pangene:
             allow_missing=True,
         ),
     output:
-        gfa="analyses/pangene/{graph}.{peptides}.gfa",
+        gfa="analyses/pangene/{graph}.{peptides}.{clustered}.{region}.gfa",
+    params:
+        region_regex = lambda wildcards: r"#\d{1,2}:" if wilcards.region == "autosomes" else f"#{wildcards.region}:"
     threads: 1
     resources:
         mem_mb_per_cpu=5000,
@@ -89,7 +108,7 @@ rule pangene:
         """
 for F in {input.paf}
 do
-  zgrep -vhP "#(X|Y|MT|unplaced)#" $F | pigz -c > $TMPDIR/$(basename $F)
+  zgrep -P "{params.region_regex}" $F | pigz -c > $TMPDIR/$(basename $F)
 done
 pangene $TMPDIR/*paf.gz > {output.gfa}
         """
@@ -98,12 +117,15 @@ pangene $TMPDIR/*paf.gz > {output.gfa}
 rule pangene_matrix:
     input:
         gfa=rules.pangene.output["gfa"],
+        clusters=lambda wildcards: rules.cd_hit_collapse_genes.output["clusters"] if wildcards.clustered == "clustered" else []
     output:
-        tsv="analyses/pangene/{graph}.{peptides}.tsv",
+        tsv="analyses/pangene/{graph}.{peptides}.{clustered}.{region}.tsv"
+    params:
+        collapse_paralogs = lambda wildcards, input: "-d {input.clusters}" if wildcards.clustered == "clustered" else ""
     localrule: True
     shell:
         """
-pangene.js gfa2matrix -c {input.gfa} > {output.tsv}
+pangene.js gfa2matrix -c {params.collapse_paralogs} {input.gfa} > {output.tsv}
         """
 
 
@@ -111,7 +133,7 @@ rule pangene_call:
     input:
         gfa=rules.pangene.output["gfa"],
     output:
-        "analyses/pangene/{graph}.{peptides}.call",
+        "analyses/pangene/{graph}.{peptides}.{clustered}.{region}.call",
     localrule: True
     shell:
         """
