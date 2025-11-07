@@ -1,14 +1,12 @@
 rule KMC_count:
     input:
-        fasta=rules.panSN_renaming.output["fasta"],  #rules.samtools_fastq.output,
-        #coverage = rules.estimate_coverage.output
+        fasta=rules.panSN_renaming.output["fasta"],
     output:
         kmers=multiext(
             "analyses/satellites/{sample}.kmc", ".kmc_pre", ".kmc_suf", ".txt"
         ),
     params:
         prefix=lambda wildcards, output: Path(output[0]).with_suffix(""),
-        #threshold = lambda wildcards, input: int(float(open(input.coverage[0]).read())*10)
     threads: 2
     resources:
         mem_mb_per_cpu=10000,

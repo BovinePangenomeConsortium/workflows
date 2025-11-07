@@ -131,12 +131,7 @@ vg autoindex --prefix {params.prefix} \
 
 rule kmc_count:
     input:
-        fastq=expand(
-            "/cluster/work/pausch/alex/genome_alignment/fastq/{sample}.hap1.R{N}.SR.fq.gz",
-            N=(1, 2),
-            allow_missing=True,
-        ),
-        #fastq = 'data/sequencing_reads/{sample}.fq'
+        fastq="data/sequencing_reads/{sample}.fq",
     output:
         kff="analyses/giraffe/kmers/{sample}.kff",
     params:

@@ -226,7 +226,6 @@ rule summarise_all_metrics:
         ),
     output:
         metrics="analyses/QC_summary.{graph}.csv",
-        # vcf = multiext('analyses/QC_variants.vcf.gz', '', '.csi')
     localrule: True
     shell:
         """

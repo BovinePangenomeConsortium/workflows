@@ -24,7 +24,7 @@ graph_choices = (
 
 wildcard_constraints:
     sample=r"[\w+\.\-_]+",
-    graph=r"|".join(["every"]+graph_choices),
+    graph=r"|".join(["every"] + graph_choices),
     chromosome=r"|".join(ALL_CHROMOSOME),
     L=r"\d+",
     reference="|".join(config.get("references")),
@@ -47,10 +47,10 @@ alignment_metadata = (
 
 
 # TODO: need to rewrite to handle AGC IDs
-def determine_pangenome_samples(wildcards):
+def determine_pangenome_subset(wildcards):
     try:
         match wildcards.graph:
-            case ( #can I capture all cases based on graph_choices?
+            case (  # can I capture all cases based on graph_choices?
                 "Cattle_n1" | "Cattle" | "All"
             ):  # Note does not include QC fails in "all"
                 subset = metadata.filter(
@@ -72,6 +72,11 @@ def determine_pangenome_samples(wildcards):
                 subset = metadata
     except AttributeError:
         subset = metadata
+    return subset
+
+
+def determine_pangenome_samples(wildcards):
+    subset = determine_pangenome_subset(wildcards)
     return subset.get_column("Filename").to_list()
 
 
@@ -89,4 +94,3 @@ include: "snakepit/QC_assemblies.smk"
 rule all:
     input:
         "analyses/QC_summary.All.csv",
-        #expand('analyses/pggb/medium_test/p95_s5000/{chromosome}.k31.POAasm20.unchop.graph.png',chromosome=ALL_CHROMOSOME)

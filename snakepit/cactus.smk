@@ -6,7 +6,7 @@ import polars as pl
 
 rule all:
     input:
-        "cactus/every/genome.full.gbz"
+        "cactus/every/genome.full.gbz",
 
 
 rule cactus_make_seqfile:
