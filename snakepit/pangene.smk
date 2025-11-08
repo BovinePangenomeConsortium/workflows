@@ -130,7 +130,7 @@ rule miniprot_align:
         runtime="2h",
     shell:
         """
-miniprot -t {threads} --outs=0.97 -I -u --spsc={input.splicing} {input.peptides} {input.peptides} |\
+miniprot -t {threads} --outs=0.97 -I -u --spsc={input.splicing} {input.fasta} {input.peptides} |\
 pigz -p {threads} -c > {output.paf}
         """
 
@@ -180,7 +180,7 @@ rule pangene_matrix:
         tsv="analyses/pangene/{graph}.{peptides}.{clustered}.{region}.tsv",
     params:
         collapse_paralogs=lambda wildcards, input: (
-            "-d {input.clusters}" if wildcards.clustered == "clustered" else ""
+            f"-d {input.clusters}" if wildcards.clustered == "clustered" else ""
         ),
     localrule: True
     shell:
