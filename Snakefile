@@ -24,8 +24,8 @@ graph_choices = (
 
 wildcard_constraints:
     sample=r"[\w+\.\-_]+",
-    graph=r"|".join(["every"] + graph_choices),
-    chromosome=r"|".join(ALL_CHROMOSOME),
+    graph="|".join(["every"] + graph_choices),
+    chromosome="|".join(ALL_CHROMOSOME),
     L=r"\d+",
     reference="|".join(config.get("references")),
     peptides="|".join(config.get("peptides")),
@@ -46,7 +46,6 @@ alignment_metadata = (
 )
 
 
-# TODO: need to rewrite to handle AGC IDs
 def determine_pangenome_subset(wildcards):
     try:
         match wildcards.graph:

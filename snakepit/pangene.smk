@@ -11,6 +11,7 @@ rule download_annotated_peptides:
             "proteins"
         ],
         url_GTF=lambda wildcards: config["peptides"][wildcards.peptides]["GTF"],
+        url_chromalias="https://hgdownload.soe.ucsc.edu/hubs/GCF/002/263/795/GCF_002263795.3/GCF_002263795.3.chromAlias.txt",
     localrule: True
     shell:
         """
@@ -18,7 +19,7 @@ wget --quiet -O {wildcards.peptides}.TMP.fa.gz {params.url_peptides}
 wget --quiet -O {output.GTF} {params.url_GTF}
 
 if [[ "{wildcards.peptides}" == *"RefSeq"* ]]; then
-    wget https://hgdownload.soe.ucsc.edu/hubs/GCF/002/263/795/GCF_002263795.3/GCF_002263795.3.chromAlias.txt
+    wget {params.url_chromalias}
     zcat {wildcards.peptides}.TMP.fa.gz | awk -F'\\t' 'NR==FNR{{if($0!~/^#/){{key=$1;val=$4;if(val=="")val=key;a[key]=val}}next}} !/^#/{{if($1 in a)$1=a[$1]}}1' GCF_002263795.3.chromAlias.txt - | bgzip -c > {output.peptides}
     rm GCF_002263795.3.chromAlias.txt {wildcards.peptides}.TMP.fa.gz
 elif [[ "{wildcards.peptides}" == *"Ensembl"* ]]; then
@@ -71,11 +72,16 @@ cd-hit -i {input.peptides} -o {output.peptides} -c 0.9 -aS 0.8 -n 5 -T {threads}
 
 rule minisplice_model:
     output:
-        multiext("vi2-7k.kan", "", ".cali", ".log"),
+        multiext("analyses/pangene/minisplice", "vi2-7k.kan", "", ".cali", ".log"),
+    params:
+        _dir=lambda wildcards, output: Path(output[0]).parent,
+        url="https://zenodo.org/records/15931054/files/vi2-7k.tgz",
     localrule: True
     shell:
         """
-wget -O- https://zenodo.org/records/15931054/files/vi2-7k.tgz | tar zxf - 
+mkdir -p {params._dir}
+
+wget -O- {params.url} | tar -xz -C {params._dir}
         """
 
 
@@ -135,8 +141,7 @@ pigz -p {threads} -c > {output.paf}
         """
 
 
-# TODO: can we drop the pigz and just use uncompressed?
-# TODO: use custom pangene to read panSN names rather than filename?
+# note: uses custom ASLeonard/pangene fork with panSN naming scheme support
 rule pangene:
     input:
         paf=expand(
@@ -158,11 +163,8 @@ rule pangene:
         runtime="1h",
     shell:
         """
-for F in {input.paf}
-do
-  zgrep -P "{params.region_regex}" $F | pigz -c > $TMPDIR/$(basename $F)
-done
-pangene $TMPDIR/*paf.gz > {output.gfa}
+zgrep -hP "{params.region_regex}" {input.paf} |\
+pangene -N - > {output.gfa}
         """
 
 
