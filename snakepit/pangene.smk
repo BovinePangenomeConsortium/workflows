@@ -135,9 +135,7 @@ pigz -p {threads} -c > {output.paf}
         """
 
 
-# TODO: check regex works correctly for new panSN
 # TODO: can we drop the pigz and just use uncompressed?
-# TODO: can build regex-based graphs (autosomes, X, Y, MT) etc
 # TODO: use custom pangene to read panSN names rather than filename?
 rule pangene:
     input:

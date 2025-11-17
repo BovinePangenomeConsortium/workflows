@@ -38,8 +38,8 @@ rule ragtag_scaffold:
         _dir=lambda wildcards, output: Path(output[0]).parent,
         mm2_opt="--cs -c -x asm10",
         exclude_unplaced=f"^({'|'.join(list(map(str, range(1,30)))+['X', 'Y', 'MT'])})",
-        remove_small=lambda wildcards: (
-            "--remove-small -f 10000000"
+        annotated_exclude=lambda wildcards: (
+            "-j $TMPDIR/query_exclude.txt"
             if wildcards.sample in ANNOTATED_GENOMES
             else ""
         ),
@@ -52,11 +52,12 @@ rule ragtag_scaffold:
     shell:
         """
 grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR/unplaced.txt
+grep -vwP "{params.exclude_unplaced}" {input.fasta}.fai | cut -f 1 > $TMPDIR/query_exclude.txt
 
 ragtag.py scaffold {input.reference} {input.fasta} \
   -o {params._dir} \
   --mm2-params "{params.mm2_opt} -t {threads}" \
-  -e $TMPDIR/unplaced.txt {params.remove_small}
+  -e $TMPDIR/unplaced.txt {params.annotated_exclude}
         """
 
 
