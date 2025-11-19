@@ -1,0 +1,4 @@
+﻿Animal ID,Haplotype,Sex,Species,Subspecies,Breed,Public download,QC Fail,Graphs,genome size,N contigs,NG50,BUSCOs,SNPs,InDels,autosomes covered,X covered,Y covered,MT covered
+AAAA0000,1,M,Bos taurus,Taurine,BreedA,,,,,,,,,,,, 
+AAAA0000,2,M,Bos taurus,Taurine,BreedA,,,,,,,,,,,, 
+BBBB1111,0,F,Bos taurus,Taurine,BreedA,,,,,,,,,,,,

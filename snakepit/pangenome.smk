@@ -1,3 +1,4 @@
+#TODO: better handle raw_data and hide from main pipeline
 rule cut_assemblies_at_gaps:
     input:
         fasta=multiext("data/raw_assemblies/{sample}.fasta.gz", "", ".fai", ".gzi"),
@@ -100,7 +101,7 @@ rule panSN_renaming:
             rules.ragtag_scaffold.output[0], reference="ARS_UCD2.0", allow_missing=True
         ),
     output:
-        fasta=multiext("data/currated_assemblies/{sample}.fa.gz", "", ".fai", ".gzi"),
+        fasta=multiext(str(Path(config.get('assemblies_dir','')) / "{sample}.fa.gz"), "", ".fai", ".gzi"),
     params:
         naming_schema=lambda wildcards: panSN_naming_schema(wildcards.sample),
     threads: 2
@@ -138,10 +139,10 @@ agc create -d -t {threads} {input.assemblies} > {output.agc}
 
 rule panSN_split:
     input:
-        fasta=multiext("data/currated_assemblies/{sample}.fa.gz", "", ".fai", ".gzi"),
+        fasta=rules.panSN_renaming.output["fasta"],
     output:
         fasta=expand(
-            "data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
+            Path(config.get('assemblies_dir','')) / "chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
             ext=("", ".fai", ".gzi"),
             chromosome=list(map(str, range(1, 30))),
         ),
@@ -167,12 +168,12 @@ done
 # TODO: this still doesn't like getting non-existant chromosomes
 rule panSN_split2:
     input:
-        fasta=multiext("data/currated_assemblies/{sample}.fa.gz", "", ".fai", ".gzi"),
+        fasta=multiext(str(Path(config.get('assemblies_dir','')) / "{sample}.fa.gz"), "", ".fai", ".gzi"),
     output:
         fasta=expand(
-            "data/currated_assemblies/chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
+            Path(config.get('assemblies_dir','')) / "chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
             ext=("", ".fai", ".gzi"),
-            chromosome=("X", "Y", "MT"),
+            chromosome=['X', 'Y', 'MT']
         ),
     params:
         regex=lambda wildcards: "" if wildcards.sample in ANNOTATED_GENOMES else r"#\d",
@@ -203,13 +204,14 @@ done
 rule panSN_gather:
     input:
         assemblies=expand(
+            Path(config.get('assemblies_dir','')) / "chromosomes/{sample}.{chromosome}.fa.gz",
             "data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz",
             sample=determine_pangenome_samples,
             allow_missing=True,
         ),
     output:
         fasta=multiext(
-            "data/currated_assemblies/{graph}/{chromosome}.fa.gz", "", ".fai", ".gzi"
+            str(Path(config.get('assemblies_dir','')) / "{graph}/{chromosome}.fa.gz"), "", ".fai", ".gzi"
         ),
     shell:
         """

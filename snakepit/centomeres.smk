@@ -81,3 +81,9 @@ rule srf_gather:
         """
         touch {output}
         """
+
+# TODO: we can use https://github.com/richarddurbin/rotate and cd-hit-est to realign+cluster sequences
+# Will require some careful thought on picking initial frame sequence for each major sat type, as well as pre-filtering low abundance repeats
+# e.g. for BTSAT of length 1400
+# rotate -s AAGGGGTTCCCGAC sats.fa > rotated.fa
+# cd-hit-est -i rotated.fa -o r.fa -c 0.99 -n 11 -G 0 -aS 0.9 -d 0 -T 1

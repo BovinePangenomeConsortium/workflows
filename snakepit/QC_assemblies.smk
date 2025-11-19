@@ -2,24 +2,6 @@
 # many assemblies are gzipped, but we want bgzipped for better random access
 
 
-rule rebgzip_assemblies:
-    input:
-        "downloaded_assemblies/{sample}.fa.gz",
-    output:
-        multiext("data/raw_assemblies/{sample}.fasta.gz", "", ".fai", ".gzi"),
-    threads: 4
-    resources:
-        mem_mb_per_cpu=2000,
-        runtime="1h",
-    shell:
-        """
-pigz -dc -p 4 {input} |\
-bgzip -@ 4 -c > {output[0]}
-
-samtools index -@ 4 {output[0]}
-        """
-
-
 rule calculate_N50:
     input:
         fasta=rules.panSN_renaming.output["fasta"],

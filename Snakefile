@@ -27,15 +27,18 @@ wildcard_constraints:
     graph="|".join(["every"] + graph_choices),
     chromosome="|".join(ALL_CHROMOSOME),
     L=r"\d+",
-    reference="|".join(config.get("references")),
-    peptides="|".join(config.get("peptides")),
+    reference="|".join(config.get("references",[])),
+    peptides="|".join(config.get("peptides",[])),
 
 
-ANNOTATED_GENOMES = (
-    metadata.filter(pl.col("Reference annotation") == "Y")
-    .get_column("Filename")
-    .to_list()
-)
+try:
+    ANNOTATED_GENOMES = (
+      metadata.filter(pl.col("Reference annotation") == "Y")
+     .get_column("Filename")
+      .to_list()
+    )
+except:
+    ANNOTATED_GENOMES = []
 
 ALL_CHROMOSOME = list(map(str, range(1, 30))) + ["X", "Y", "MT"]
 
@@ -92,4 +95,4 @@ include: "snakepit/QC_assemblies.smk"
 
 rule all:
     input:
-        "analyses/QC_summary.All.csv",
+        "analyses/QC_summary.every.csv",

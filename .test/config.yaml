@@ -1,0 +1,8 @@
+
+metadata: 'BPC_metadata.csv'
+
+assemblies_dir: "data/assemblies"
+references:
+  ARS_UCD2.0: 'data/ARS.fa'
+
+#peptides
