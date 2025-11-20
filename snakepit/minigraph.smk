@@ -1,6 +1,6 @@
 rule mash_sketch:
     input:
-        fasta=multiext("data/currated_assemblies/{sample}.fa.gz", "", ".fai", ".gzi"),
+        fasta=rules.panSN_renaming.output["fasta"],
     output:
         sketch="analyses/minigraph/mash/{sample}.msh",
     params:
@@ -35,12 +35,12 @@ mash dist -p {threads} {input.sketches} > {output.mash}
 rule minigraph_construct:
     input:
         assemblies=expand(
-            "data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz",
+            rules.panSN_split.output["fasta"],
             sample=determine_pangenome_samples,
             allow_missing=True,
         ),
     output:
-        gfa="analyses/minigraph/{graph}/L{L}/{chromosome}.basic.gfa",
+        gfa="analyses/minigraph/{graph}/L{L}/mg.basic.gfa",
     threads: 1
     resources:
         mem_mb_per_cpu_per_cpu=20000,
@@ -54,16 +54,16 @@ minigraph -t {threads} -cxggs -j 0.05 -L {wildcards.L} {input.assemblies} > {out
 rule minigraph_call:
     input:
         gfa=rules.minigraph_construct.output["gfa"],
-        assembly="data/currated_assemblies/chromosomes/{sample}.{chromosome}.fa.gz",
+        fasta=rules.panSN_renaming.output["fasta"],
     output:
-        bed="analyses/minigraph/{graph}/L{L}/{sample}.{chromosome}.bed",
+        bed="analyses/minigraph/{graph}/L{L}/{sample}.bed",
     threads: 1
     resources:
         mem_mb_per_cpu_per_cpu=10000,
         runtime="1h",
     shell:
         """
-minigraph -t {threads} -cxasm --call -j 0.05 -L {wildcards.L} {input.gfa} {input.assembly} > {output.bed}
+minigraph -t {threads} -cxasm --call -j 0.05 -L {wildcards.L} {input.gfa} {input.fasta} > {output.bed}
         """
 
 
@@ -76,7 +76,7 @@ rule minigraph_path:
         ),
         gfa=rules.minigraph_construct.output["gfa"],
     output:
-        gfa="analyses/minigraph/{graph}/L{L}/{chromosome}.gfa",
+        gfa="analyses/minigraph/{graph}/L{L}/mg.gfa",
     threads: 1
     resources:
         mem_mb_per_cpu_per_cpu=5000,

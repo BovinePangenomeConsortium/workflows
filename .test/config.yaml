@@ -5,4 +5,7 @@ assemblies_dir: "data/assemblies"
 references:
   ARS_UCD2.0: 'data/ARS.fa'
 
-#peptides
+peptides:
+  ARS_UCD2.0_Ensembl:
+    proteins: 'https://ftp.ensembl.org/pub/release-115/fasta/bos_taurus/pep/Bos_taurus.ARS-UCD2.0.pep.all.fa.gz'
+    GTF: 'https://ftp.ensembl.org/pub/release-115/gtf/bos_taurus/Bos_taurus.ARS-UCD2.0.115.gtf.gz'

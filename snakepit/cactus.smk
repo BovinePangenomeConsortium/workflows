@@ -1,12 +1,5 @@
 # very stripped back version of https://github.com/harvardinformatics/cactus-snakemake/blob/main/cactus_minigraph.smk
 # TODO: optimize resource usage and add more config options
-import re
-import polars as pl
-
-
-rule all:
-    input:
-        "cactus/every/genome.full.gbz",
 
 
 rule cactus_make_seqfile:
@@ -33,21 +26,28 @@ rule cactus_make_seqfile:
 rule cactus_minigraph:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
+        fasta=expand(
+            rules.panSN_renaming.output["fasta"],
+            sample=determine_pangenome_samples,
+            allow_missing=True,
+        ),
     output:
         gfa="cactus/{graph}/sv.gfa",
+    params:
+        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
         runtime="4h",
     container:
-        config["cactus_image"]
+        config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-minigraph \
 $TMPDIR/minigraph \
 {input.seqfile} \
 {output.gfa} \
---reference {config[reference_ID]}
+--reference {params.reference_ID}
 """
 
 
@@ -65,12 +65,14 @@ rule cactus_graphmap:
             paf_filter_log=".paf.filter.log",
             paf_unfiltered=".paf.unfiltered.gz",
         ),
+    params:
+        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 18
     resources:
         mem_mb_per_cpu=5000,
         runtime="4h",
     container:
-        config["cactus_image"]
+        config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap \
@@ -79,7 +81,7 @@ $TMPDIR/graphmap \
 {input.gfa} \
 {output.paf} \
 --outputFasta {output.fasta} \
---reference {config[reference_ID]}
+--reference {params.reference_ID}
 """
 
 
@@ -91,12 +93,14 @@ checkpoint cactus_split:
     output:
         split_dir=directory("cactus/{graph}/split"),
         chromfile="cactus/{graph}/split/chromfile.txt",
+    params:
+        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 2
     resources:
         mem_mb_per_cpu=20000,
         runtime="4h",
     container:
-        config["cactus_image"]
+        config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap-split \
@@ -105,7 +109,7 @@ $TMPDIR/split \
 {input.gfa} \
 {input.paf} \
 --outDir {output.split_dir} \
---reference {config[reference_ID]}
+--reference {params.reference_ID}
 """
 
 
@@ -115,12 +119,14 @@ rule cactus_align:
         paf="cactus/{graph}/split/{contig}/{contig}.paf",
     output:
         multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
+    params:
+        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 4
     resources:
         mem_mb_per_cpu=10000,
         runtime="4h",
     container:
-        config["cactus_image"]
+        config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-align \
@@ -129,7 +135,7 @@ $TMPDIR/align \
 {input.paf} \
 {output.hal} \
 --pangenome \
---reference {config[reference_ID]} \
+--reference {params.reference_ID} \
 --outVG
 """
 
@@ -159,13 +165,14 @@ rule cactus_join:
         ),
     params:
         out_dir=lambda wildcards, output: Path(output[0]).parent,
+        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
         references=" ".join(config.get("additional_references", [])),
     threads: 8
     resources:
         mem_mb_per_cpu=10000,
         runtime="4h",
     container:
-        config["cactus_image"]
+        config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap-join \
@@ -173,7 +180,7 @@ $TMPDIR/join \
 --vg {input.vg} \
 --outDir {params.out_dir} \
 --outName {wildcards.graph} \
---reference {config[reference_ID]} {params.references} \
+--reference {params.reference_ID} {params.references} \
 --unchopped-gfa full clip \
 --gbz full clip \
 --vcfwave \

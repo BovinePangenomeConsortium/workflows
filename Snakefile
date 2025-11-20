@@ -1,4 +1,5 @@
 import polars as pl
+import re
 
 
 ALL_CHROMOSOME = list(map(str, range(1, 30))) + ["X", "Y", "MT"]
@@ -27,15 +28,15 @@ wildcard_constraints:
     graph="|".join(["every"] + graph_choices),
     chromosome="|".join(ALL_CHROMOSOME),
     L=r"\d+",
-    reference="|".join(config.get("references",[])),
-    peptides="|".join(config.get("peptides",[])),
+    reference="|".join(config.get("references", [])),
+    peptides="|".join(config.get("peptides", [])),
 
 
 try:
     ANNOTATED_GENOMES = (
-      metadata.filter(pl.col("Reference annotation") == "Y")
-     .get_column("Filename")
-      .to_list()
+        metadata.filter(pl.col("Reference annotation") == "Y")
+        .get_column("Filename")
+        .to_list()
     )
 except:
     ANNOTATED_GENOMES = []
@@ -82,17 +83,26 @@ def determine_pangenome_samples(wildcards):
     return subset.get_column("Filename").to_list()
 
 
+# Assembly level analyses
 include: "snakepit/pangenome.smk"
 include: "snakepit/QC_assemblies.smk"
+include: "snakepit/centomeres.smk"
+# Pangenome graph builders
+include: "snakepit/minigraph.smk"
+include: "snakepit/pangene.smk"
+include: "snakepit/cactus.smk"
 
 
-# include: 'snakepit/minigraph.smk'
 # include: 'snakepit/pggb.smk'
-# include: 'snakepit/pangene.smk'
+
+# Pangenome graph analyses
 # include: 'snakepit/pangenome_alignment.smk'
-# include: 'snakepit/centomeres.smk'
 
 
 rule all:
     input:
         "analyses/QC_summary.every.csv",
+        "analyses/satellites/every.txt",
+        "analyses/pangene/every.ARS_UCD2.0_Ensembl.clustered.autosomes.tsv",
+        "analyses/minigraph/every/L50/mg.gfa",
+        "cactus/every/genome.full.unchopped.gfa.gz",
