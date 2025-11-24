@@ -1,4 +1,3 @@
-# TODO: better handle raw_data and hide from main pipeline
 rule cut_assemblies_at_gaps:
     input:
         fasta=multiext("data/raw_assemblies/{sample}.fasta.gz", "", ".fai", ".gzi"),

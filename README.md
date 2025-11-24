@@ -4,41 +4,19 @@ This is the home for pipelines related to the [Bovine Pangenome Consortium](http
 This is a work in progress, but reach out if you have any questions!
 
 
-### Unpacking the genomes
+### Using the pipeline
 
-The genome archive can be unpacked with [agc](https://github.com/refresh-bio/agc), writing out all (compressed) assemblies to a given folder
+Currently, the pipelines are optimised to run on ETH's cluster Euler.
+Tools are assumed to be installed, but eventually conda environments will be supported.
+
+We can test the pipeline itself works (without checking the individual jobs work) with
 
 ```
-mkdir -p agc
-agc getcol -g 5 -o agc -t 4 -f BPC.agc
+git clone git@github.com:BovinePangenomeConsortium/workflows.git
+cd .test
+snakemake -s ../Snakefile --configfile config.yaml -n
 ```
 
-### Assessing assembly quality
+### Details
 
-We need to get a rough idea of how well assembled these genomes are, but for many samples we only have the assembly itself, not the raw data.
-As such, we have to rely on some proxy metrics.
-Some should be self-explanatory, but otherwise here is a short description
-
- + NG50: N50 measure for contiguity assuming a genome size of 3 GB
- + autosome/X/Y single/duplicated/missing copy: How many cetartiodactyla USCOs do we find in single/duplicated/missing states across the different chromosomes
-   + we do this to avoid penalising male haplotype-resolved assemblies which **should** be missing many X chromosome-specific USCOs
- + SNPs/InDels: calculated from `minimap2 -c --cs | paftools.js call` using the [ARS-UCD2.0](https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_002263795.3/) reference genome
- + autosome/X/Y/MT covered: the fraction of each chromosome covered by those `minimap2` alignments
-   + we do this as a proxy to identify the sex of the assembly where not easily available and identify obvious misassemblies
-
-We can also estimate the average gap-compressed identity of the alignments through `cut -f 1,6,13 *.alignment.paf`
-
-### Pangenome processing
-
-
-### Reference pangenome building
-
-
-
-### Downstream reference pangenomics
-
-
-
-### Other pangenomic analyses
-
-
+More details on the motivations and details of the pipeline can be found in the [BPC/docs](https://github.com/BovinePangenomeConsortium/docs) repository.

@@ -102,6 +102,7 @@ include: "snakepit/cactus.smk"
 rule all:
     input:
         "analyses/QC_summary.every.csv",
+        "analyses/PCA/every.eigenvec",
         "analyses/satellites/every.txt",
         "analyses/pangene/every.ARS_UCD2.0_Ensembl.clustered.autosomes.tsv",
         "analyses/minigraph/every/L50/mg.gfa",

@@ -1,7 +1,3 @@
-# filepath: /Users/alexleonard/Documents/Tiergenomik/BPC/workflows/snakepit/QC_assemblies.smk
-# many assemblies are gzipped, but we want bgzipped for better random access
-
-
 rule calculate_N50:
     input:
         fasta=rules.panSN_renaming.output["fasta"],
