@@ -19,6 +19,7 @@ kmc_dump {params.prefix} {output.kmers[2]}
         """
 
 
+# Note: we set `-l 40` since the smallest expected bovine SAT is 46 bp, and to avoid picking up the 23 bp sub-motifs in other SATs
 rule SRF:
     input:
         kmers=rules.KMC_count.output["kmers"][2],
@@ -42,10 +43,10 @@ rule minimap2_srf:
     threads: 6
     resources:
         mem_mb_per_cpu=2500,
-        runtime="24h",
+        runtime="4h",
     shell:
         """
-minimap2 -t {threads} -c -N1000000 -f1000 -r100,100 {input.satellites} {input.fasta[0]} > {output.paf}
+minimap2 -t {threads} -c -N1000000 -f1000 -r100,100 <(srfutils.js enlong {input.satellites}) {input.fasta[0]} > {output.paf}
         """
 
 
@@ -69,18 +70,44 @@ rule srfutils:
 
 rule srf_gather:
     input:
-        paf=expand(
+        abun=expand(
             rules.srfutils.output["abun"],
             sample=determine_pangenome_samples,
             allow_missing=True,
         ),
+        satellites=expand(
+            rules.SRF.output["satellites"],
+            sample=determine_pangenome_samples,
+            allow_missing=True,
+        ),
     output:
-        gfa="analyses/satellites/{graph}.txt",
+        csv="analyses/satellites/{graph}.csv",
     localrule: True
-    shell:
-        """
-        touch {output}
-        """
+    run:
+        srf_pattern = re.compile(r'>(?P<sample>\w+)#circ(?P<contig>\d+)-(?P<length>\d+) min=(?P<min>\d+),max=(?P<max>\d+),avg=(?P<avg>\d+)')
+        rows = []
+        for fname in input.satellites:
+            with open(fname) as fin:
+                for line in fin:
+                    if line[0] == '>':
+                        rows.append(srf_pattern.match(line.rstrip()).groupdict())
+                    else:
+                        rows[-1]['fasta']=line.rstrip()
+        satellites = pl.DataFrame(rows)
+
+        abun_pattern = re.compile(r'(?P<sample>\w+)#circ(?P<contig>\d+)-(?P<length>\d+)\t(?P<bp>\d+)\t(?P<mean_identity>(NaN|\d*\.?\d+))\t(?P<filtered>\d*\.?\d+)\t(?P<unfiltered>\d*\.?\d+)')
+
+        rows = []
+        for fname in input.abun:
+            with open(fname) as fin:
+                for line in fin:
+                    rows.append(abun_pattern.match(line.rstrip()).groupdict())
+
+        abundances = pl.DataFrame(rows)
+        (satellites.join(abundances,on=['sample','contig','length'])
+                   .with_columns(pl.col('mean_identity').str.replace("NaN","-1"))
+                   .write_csv(output['csv'])
+        )
 
 
 # TODO: we can use https://github.com/richarddurbin/rotate and cd-hit-est to realign+cluster sequences
