@@ -4,9 +4,10 @@
 
 rule cactus_make_seqfile:
     input:
+        fasta=expand(rules.panSN_renaming.output["fasta"],sample=determine_pangenome_samples,allow_missing=True),
         metadata=config["metadata"],
     output:
-        seqfile="cactus/{graph}/seqfile.tsv",
+        seqfile="analyses/cactus/{graph}/seqfile.tsv",
     localrule: True
     run:
         metadata = pl.read_csv(input.metadata, infer_schema_length=10000)
@@ -19,7 +20,7 @@ rule cactus_make_seqfile:
         with open(output.seqfile, "w") as fout:
             for row in subset.iter_rows(named=True):
                 fout.write(
-                    f"{row["Animal ID"]}.{row["Haplotype"]}\tdata/agc_assemblies/{row["Animal ID"]}_{row["Haplotype"]}.fa.gz\n"
+                    f"{row["Animal ID"]}.{row["Haplotype"]}\t{Path(config["assemblies_dir"]) / f"{row["Animal ID"]}_{row["Haplotype"]}.fa.gz"}\n"
                 )
 
 
@@ -32,13 +33,13 @@ rule cactus_minigraph:
             allow_missing=True,
         ),
     output:
-        gfa="cactus/{graph}/sv.gfa",
+        gfa="analyses/cactus/{graph}/sv.gfa",
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
-    threads: 8
+    threads: 18
     resources:
-        mem_mb_per_cpu=10000,
-        runtime="4h",
+        mem_mb_per_cpu=9000,
+        runtime="24h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
@@ -58,7 +59,7 @@ rule cactus_graphmap:
         gfa=rules.cactus_minigraph.output.gfa,
     output:
         multiext(
-            "cactus/{graph}/graphmap",
+            "analyses/cactus/{graph}/graphmap",
             paf=".paf",
             fasta=".sv.gfa.fa",
             gaf=".gaf.gz",
@@ -67,7 +68,7 @@ rule cactus_graphmap:
         ),
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
-    threads: 18
+    threads: 18 #--mapCores
     resources:
         mem_mb_per_cpu=5000,
         runtime="4h",
@@ -91,8 +92,8 @@ checkpoint cactus_split:
         gfa=rules.cactus_minigraph.output.gfa,
         paf=rules.cactus_graphmap.output.paf,
     output:
-        split_dir=directory("cactus/{graph}/split"),
-        chromfile="cactus/{graph}/split/chromfile.txt",
+        split_dir=directory("analyses/cactus/{graph}/split"),
+        chromfile="analyses/cactus/{graph}/split/chromfile.txt",
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 2
@@ -115,8 +116,8 @@ $TMPDIR/split \
 
 rule cactus_align:
     input:
-        seqfile="cactus/{graph}/split/seqfiles/{contig}.seqfile",
-        paf="cactus/{graph}/split/{contig}/{contig}.paf",
+        seqfile="analyses/cactus/{graph}/split/seqfiles/{contig}.seqfile",
+        paf="analyses/cactus/{graph}/split/{contig}/{contig}.paf",
     output:
         multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
     params:
@@ -143,7 +144,7 @@ $TMPDIR/align \
 def gather_alignments(wildcards):
     with checkpoints.cactus_split.get(**wildcards).output.chromfile.open() as f:
         return sorted(
-            [f"cactus/{{graph}}/align/{row.split('\t')[0]}.vg" for row in f],
+            [f"analyses/cactus/{{graph}}/align/{row.split('\t')[0]}.vg" for row in f],
             key=lambda s: [
                 int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)
             ],
@@ -156,7 +157,7 @@ rule cactus_join:
         vg=gather_alignments,
     output:
         multiext(
-            "cactus/{graph}/genome",
+            "analyses/cactus/{graph}/genome",
             gfa_full=".full.unchopped.gfa.gz",
             gfa_clip=".clip.unchopped.gfa.gz",
             gbz_full=".full.gbz",

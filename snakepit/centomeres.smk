@@ -95,14 +95,13 @@ rule srf_gather:
                         rows[-1]['fasta']=line.rstrip()
         satellites = pl.DataFrame(rows)
 
-        abun_pattern = re.compile(r'(?P<sample>\w+)#circ(?P<contig>\d+)-(?P<length>\d+)\t(?P<bp>\d+)\t(?P<mean_identity>(NaN|\d*\.?\d+))\t(?P<filtered>\d*\.?\d+)\t(?P<unfiltered>\d*\.?\d+)')
+        abun_pattern = re.compile(r'(?P<sample>\w+)#circ(?P<contig>\d+)-(?P<length>\d+)\t(?P<bp>\d+)\t(?P<mean_identity>\S+)\t(?P<filtered>\S+)\t(?P<unfiltered>\S+)')
 
         rows = []
         for fname in input.abun:
             with open(fname) as fin:
                 for line in fin:
                     rows.append(abun_pattern.match(line.rstrip()).groupdict())
-
         abundances = pl.DataFrame(rows)
         (satellites.join(abundances,on=['sample','contig','length'])
                    .with_columns(pl.col('mean_identity').str.replace("NaN","-1"))
