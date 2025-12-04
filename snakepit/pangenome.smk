@@ -52,7 +52,11 @@ rule ragtag_scaffold:
     shell:
         """
 grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR/unplaced.txt
-grep -vwP "{params.exclude_unplaced}" {input.fasta}.fai | cut -f 1 > $TMPDIR/query_exclude.txt
+
+if [ ! -z "{params.annotated_exclude}" ];
+then
+  grep -vwP "{params.exclude_unplaced}" {input.fasta}.fai | cut -f 1 > $TMPDIR/query_exclude.txt
+fi
 
 ragtag.py scaffold {input.reference} {input.fasta} \
   -o {params._dir} \

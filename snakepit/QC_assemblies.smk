@@ -255,3 +255,19 @@ plink2 --threads {threads} --cow --vcf {input.vcf[0]} --indep-pairwise 100kb 0.8
 
 plink2 --threads {threads} --cow --pfile {params.prefix} --pca --maf 0.1 --out {params.prefix} --extract {output[0]}
         """
+
+#needs forked simd-sketch in progress
+rule simd_sketch_PCA:
+    input:
+        fasta = expand(rules.panSN_renaming.output["fasta"],
+                sample=determine_pangenome_samples,
+                allow_missing=True)
+    output:
+        matrix = "analyses/PCA/{graph}.matrix"
+    threads: 6
+    resources:
+         mem_mb_per_cpu=2500,
+    shell:
+        """
+simd-sketch matrix --alg bottom -s 100000 -j {threads} {input.fasta} > {output.matrix}
+        """
