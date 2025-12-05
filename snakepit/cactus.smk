@@ -70,8 +70,8 @@ rule cactus_graphmap:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
     threads: 18 #--mapCores
     resources:
-        mem_mb_per_cpu=5000,
-        runtime="4h",
+        mem_mb_per_cpu=9000,
+        runtime="24h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
@@ -96,7 +96,7 @@ checkpoint cactus_split:
         chromfile="analyses/cactus/{graph}/split/chromfile.txt",
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
-    threads: 2
+    threads: 4
     resources:
         mem_mb_per_cpu=20000,
         runtime="4h",
@@ -119,12 +119,12 @@ rule cactus_align:
         seqfile="analyses/cactus/{graph}/split/seqfiles/{contig}.seqfile",
         paf="analyses/cactus/{graph}/split/{contig}/{contig}.paf",
     output:
-        multiext("cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
+        multiext("analyses/cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
-    threads: 4
+    threads: 6
     resources:
-        mem_mb_per_cpu=10000,
+        mem_mb_per_cpu=15000,
         runtime="4h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
@@ -152,6 +152,7 @@ def gather_alignments(wildcards):
 
 
 # TODO: add VCF outputs
+# split out long jobs
 rule cactus_join:
     input:
         vg=gather_alignments,
@@ -168,10 +169,10 @@ rule cactus_join:
         out_dir=lambda wildcards, output: Path(output[0]).parent,
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
         references=" ".join(config.get("additional_references", [])),
-    threads: 8
+    threads: 16
     resources:
-        mem_mb_per_cpu=10000,
-        runtime="4h",
+        mem_mb_per_cpu=15000,
+        runtime="360h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
@@ -184,6 +185,6 @@ $TMPDIR/join \
 --reference {params.reference_ID} {params.references} \
 --unchopped-gfa full clip \
 --gbz full clip \
---vcfwave \
---vcf full clip
+--vcf full clip \
+--vcfwave
 """
