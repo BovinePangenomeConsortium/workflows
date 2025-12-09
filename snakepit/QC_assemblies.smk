@@ -51,27 +51,9 @@ rm -rf {params._dir}/artiodactyla_odb12
         """
 
 
-rule minimap2_reference_aligned:
-    input:
-        fasta=rules.panSN_renaming.output["fasta"],
-        reference=lambda wildcards: config["references"][wildcards.reference],
-    output:
-        "analyses/QC/reference_alignment/{sample}.{reference}.paf.gz",
-    threads: 4
-    resources:
-        mem_mb_per_cpu=10000,
-        runtime="2h",
-    shell:
-        """
-minimap2 -t {threads} --cs -cxasm10 {input.reference} {input.fasta[0]} |\
-pigz -p {threads} -c > {output}
-        """
-
-
 rule calculate_variant_level:
     input:
         paf=rules.ragtag_scaffold.output[5],
-        # paf = rules.minimap2_reference_aligned.output,
         reference=lambda wildcards: config["references"][wildcards.reference],
     output:
         vcf=multiext(
@@ -145,7 +127,6 @@ paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' 
 rule calculate_reference_coverage:
     input:
         paf=rules.ragtag_scaffold.output[5],
-        # paf = rules.minimap2_reference_aligned.output,
         fai=lambda wildcards: f"{config['references'][wildcards.reference]}.fai",
     output:
         bed="analyses/QC/reference_alignment/{sample}.{reference}.covered.bed",
@@ -218,18 +199,21 @@ rule bcftools_merge:
             sample=determine_pangenome_samples,
             reference="ARS_UCD2.0",
         ),
+        fasta = config['references']['ARS_UCD2.0']
     output:
-        vcf=multiext("analyses/{graph}.vcf.gz", "", ".csi"),
-        stats="analyses/{graph}.vcf.stats",
+        vcf=multiext("analyses/QC/VCF/{graph}.vcf.gz", "", ".csi"),
+        stats="analyses/QC/VCF/{graph}.vcf.stats",
     threads: 4
     resources:
         mem_mb_per_cpu=12500,
-        walltime="24h",
+        walltime="4h",
     shell:
         """
 bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
 bcftools +setGT --threads {threads} -Ou - -- -t . -n 0 |\
-bcftools norm --threads {threads} -Ou -m-any |\
+bcftools norm -f {input.fasta} -Ou |\
+bcftools sort -T $TMPDIR -Ou |\
+bcftools norm --threads {threads} -Ou -m+any |\
 bcftools +fill-tags --threads {threads} -Ou - -- -t AF |\
 bcftools annotate --threads {threads} --set-id '%VKX' -W -o {output.vcf[0]}
 
@@ -242,7 +226,7 @@ rule plink_PCA:
         vcf=rules.bcftools_merge.output["vcf"],
     output:
         multiext(
-            "analyses/PCA/{graph}.{variants}", ".prune.in", ".prune.out", ".eigenval", ".eigenvec"
+            "analyses/QC/PCA/{graph}.{variants}", ".prune.in", ".prune.out", ".eigenval", ".eigenvec"
         ),
     params:
         prefix=lambda wildcards, output: Path(output[2]).with_suffix(""),
@@ -264,7 +248,7 @@ rule simd_sketch_PCA:
                 sample=determine_pangenome_samples,
                 allow_missing=True)
     output:
-        matrix = "analyses/PCA/{graph}.matrix"
+        matrix = "analyses/QC/PCA/{graph}.matrix"
     threads: 6
     resources:
          mem_mb_per_cpu=2500,
