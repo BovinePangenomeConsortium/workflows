@@ -1,6 +1,4 @@
 # very stripped back version of https://github.com/harvardinformatics/cactus-snakemake/blob/main/cactus_minigraph.smk
-# TODO: optimize resource usage and add more config options
-
 
 rule cactus_make_seqfile:
     input:
@@ -36,23 +34,25 @@ rule cactus_minigraph:
         gfa="analyses/cactus/{graph}/sv.gfa",
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.gfa).parent) / "minigraph_TEMPDIR",
     threads: 18
     resources:
-        mem_mb_per_cpu=9000,
-        runtime="24h",
+        mem_mb_per_cpu=12000,
+        runtime="120h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-minigraph \
-$TMPDIR/minigraph \
+{params.jobstore} \
+--workDir {params.jobstore} \
 {input.seqfile} \
 {output.gfa} \
 --reference {params.reference_ID}
 """
 
 
-# Default cactus params use 6 threads per minigraph job
+# Default cactus params use 6 threads per minigraph job, change with --mapCores
 rule cactus_graphmap:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
@@ -68,16 +68,18 @@ rule cactus_graphmap:
         ),
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
-    threads: 18 #--mapCores
+        jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.paf).parent) / "graphmap_TEMPDIR",
+    threads: 18
     resources:
         mem_mb_per_cpu=9000,
-        runtime="24h",
+        runtime="120h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap \
-$TMPDIR/graphmap \
+{params.jobstore} \
+--workDir {params.jobstore} \
 {input.seqfile} \
 {input.gfa} \
 {output.paf} \
@@ -96,16 +98,18 @@ checkpoint cactus_split:
         chromfile="analyses/cactus/{graph}/split/chromfile.txt",
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.chromfile).parent) / "split_TEMPDIR",
     threads: 4
     resources:
         mem_mb_per_cpu=20000,
-        runtime="4h",
+        runtime="48h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap-split \
-$TMPDIR/split \
+{params.jobstore} \
+--workDir {params.jobstore} \
 {input.seqfile} \
 {input.gfa} \
 {input.paf} \
@@ -122,16 +126,18 @@ rule cactus_align:
         multiext("analyses/cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
     params:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.vg).parent) / "align_TEMPDIR",
     threads: 6
     resources:
         mem_mb_per_cpu=15000,
-        runtime="4h",
+        runtime="48h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-align \
-$TMPDIR/align \
+{params.jobstore} \
+--workDir {params.jobstore} \
 {input.seqfile} \
 {input.paf} \
 {output.hal} \
@@ -158,33 +164,38 @@ rule cactus_join:
         vg=gather_alignments,
     output:
         multiext(
-            "analyses/cactus/{graph}/genome",
+            "analyses/cactus/{graph}/{graph}",
             gfa_full=".full.unchopped.gfa.gz",
-            gfa_clip=".clip.unchopped.gfa.gz",
             gbz_full=".full.gbz",
-            gbz_clip=".clip.gbz",
+            snarls_full=".full.snarls",
+            gfa_clip=".unchopped.gfa.gz",
+            gbz_clip=".gbz",
+            snarls_clip=".snarls",
             stats=".stats.tgz",
         ),
     params:
         out_dir=lambda wildcards, output: Path(output[0]).parent,
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
         references=" ".join(config.get("additional_references", [])),
+        jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.stats).parent) / "join_TEMPDIR",
     threads: 16
     resources:
-        mem_mb_per_cpu=15000,
-        runtime="360h",
+        mem_mb_per_cpu=10000,
+        runtime="24h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap-join \
-$TMPDIR/join \
+{params.jobstore} \
+--workDir {params.jobstore} \
 --vg {input.vg} \
 --outDir {params.out_dir} \
 --outName {wildcards.graph} \
 --reference {params.reference_ID} {params.references} \
 --unchopped-gfa full clip \
---gbz full clip \
---vcf full clip \
---vcfwave
+--gbz full clip 
 """
+#--vcf full clip \
+#--vcfwave
+
