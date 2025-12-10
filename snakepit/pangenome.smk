@@ -141,7 +141,7 @@ rule agc_create:
         runtime="4h",
     shell:
         """
-agc create -d -t {threads} {input.assemblies} > {output.agc}
+agc create -d -t {threads} -o {output.agc} {input.assemblies}
         """
 
 

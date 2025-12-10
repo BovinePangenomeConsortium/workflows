@@ -45,7 +45,6 @@ rule cactus_minigraph:
         """
 cactus-minigraph \
 {params.jobstore} \
---workDir {params.jobstore} \
 {input.seqfile} \
 {output.gfa} \
 --reference {params.reference_ID}
@@ -79,7 +78,6 @@ rule cactus_graphmap:
         """
 cactus-graphmap \
 {params.jobstore} \
---workDir {params.jobstore} \
 {input.seqfile} \
 {input.gfa} \
 {output.paf} \
@@ -109,7 +107,6 @@ checkpoint cactus_split:
         """
 cactus-graphmap-split \
 {params.jobstore} \
---workDir {params.jobstore} \
 {input.seqfile} \
 {input.gfa} \
 {input.paf} \
@@ -137,7 +134,6 @@ rule cactus_align:
         """
 cactus-align \
 {params.jobstore} \
---workDir {params.jobstore} \
 {input.seqfile} \
 {input.paf} \
 {output.hal} \
@@ -166,8 +162,8 @@ rule cactus_join:
         multiext(
             "analyses/cactus/{graph}/{graph}",
             gfa_full=".full.unchopped.gfa.gz",
-            gbz_full=".full.gbz",
-            snarls_full=".full.snarls",
+            #gbz_full=".full.gbz",
+            #snarls_full=".full.snarls",
             gfa_clip=".unchopped.gfa.gz",
             gbz_clip=".gbz",
             snarls_clip=".snarls",
@@ -188,13 +184,16 @@ rule cactus_join:
         """
 cactus-graphmap-join \
 {params.jobstore} \
---workDir {params.jobstore} \
 --vg {input.vg} \
 --outDir {params.out_dir} \
 --outName {wildcards.graph} \
 --reference {params.reference_ID} {params.references} \
 --unchopped-gfa full clip \
---gbz full clip 
+--snarlStats full clip \
+--gbz clip \
+--haplo clip \
+--giraffe clip \
+--lrGifaffe clip
 """
 #--vcf full clip \
 #--vcfwave
