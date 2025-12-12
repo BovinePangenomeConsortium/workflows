@@ -72,7 +72,7 @@ cd-hit -i {input.peptides} -o {output.peptides} -c 0.9 -aS 0.8 -n 5 -T {threads}
 
 rule minisplice_model:
     output:
-        multiext("analyses/pangene/minisplice", "vi2-7k.kan", "", ".cali", ".log"),
+        multiext("analyses/pangene/vi2-7k.kan", "", ".cali", ".log"),
     params:
         _dir=lambda wildcards, output: Path(output[0]).parent,
         url="https://zenodo.org/records/15931054/files/vi2-7k.tgz",
@@ -90,7 +90,7 @@ rule minisplice_predict:
         fasta=rules.panSN_renaming.output["fasta"],
         cali=rules.minisplice_model.output,
     output:
-        splicing="analyses/pangene/{sample}.tsv",
+        splicing="analyses/pangene/{sample}.minisplice.tsv",
     threads: 8
     resources:
         mem_mb_per_cpu=1000,
@@ -150,21 +150,14 @@ rule pangene:
             allow_missing=True,
         ),
     output:
-        gfa="analyses/pangene/{graph}.{peptides}.{clustered}.{region}.gfa",
-    params:
-        region_regex=lambda wildcards: (
-            r"#\d{1,2}:"
-            if wildcards.region == "autosomes"
-            else f"#{wildcards.region}:"
-        ),
+        gfa="analyses/pangene/{graph}.{peptides}.{clustered}.gfa",
     threads: 1
     resources:
         mem_mb_per_cpu=5000,
         runtime="1h",
     shell:
         """
-zgrep -hP "{params.region_regex}" {input.paf} |\
-pangene -N - > {output.gfa}
+pangene -N {input.paf} > {output.gfa}
         """
 
 
@@ -177,7 +170,7 @@ rule pangene_matrix:
             else []
         ),
     output:
-        tsv="analyses/pangene/{graph}.{peptides}.{clustered}.{region}.tsv",
+        tsv="analyses/pangene/{graph}.{peptides}.{clustered}.tsv",
     params:
         collapse_paralogs=lambda wildcards, input: (
             f"-d {input.clusters}" if wildcards.clustered == "clustered" else ""
@@ -193,7 +186,7 @@ rule pangene_call:
     input:
         gfa=rules.pangene.output["gfa"],
     output:
-        "analyses/pangene/{graph}.{peptides}.{clustered}.{region}.call",
+        "analyses/pangene/{graph}.{peptides}.{clustered}.call",
     localrule: True
     shell:
         """
