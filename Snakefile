@@ -4,10 +4,8 @@ import re
 
 ALL_CHROMOSOME = list(map(str, range(1, 30))) + ["X", "Y", "MT"]
 
-metadata = pl.read_csv(config["metadata"], infer_schema_length=10000).with_columns(
-    pl.concat_str([pl.col("Animal ID"), pl.col("Haplotype")], separator="_").alias(
-        "Filename"
-    )
+metadata = (pl.read_csv(config["metadata"], infer_schema_length=10000)
+        .with_columns(pl.concat_str([pl.col("Animal ID"), pl.col("Haplotype")], separator="_").alias("Filename"))
 )
 
 graph_choices = (
@@ -25,7 +23,7 @@ graph_choices = (
 
 wildcard_constraints:
     sample=r"[\w+\.\-_]+",
-    graph="|".join(["every"] + graph_choices),
+    graph="|".join(graph_choices),
     chromosome="|".join(ALL_CHROMOSOME),
     L=r"\d+",
     reference="|".join(config.get("references", [])),
@@ -52,27 +50,9 @@ alignment_metadata = (
 
 def determine_pangenome_subset(wildcards):
     try:
-        match wildcards.graph:
-            case (  # can I capture all cases based on graph_choices?
-                "Cattle_n1" | "Cattle" | "All"
-            ):  # Note does not include QC fails in "all"
-                subset = metadata.filter(
-                    pl.col("Graphs").str.split(";").list.contains(wildcards.graph)
-                )
-            case "breed_representative":
-                subset = metadata.filter(
-                    (pl.col("Species") == "Bos taurus")
-                    & (pl.col("Breed representative") == "Y")
-                )
-            case "subspecies_representative":
-                subset = metadata.filter(
-                    (pl.col("Species") == "Bos taurus")
-                    & (pl.col("Subspecies representative") == "Y")
-                )
-            case "every":
-                subset = metadata
-            case _:
-                subset = metadata
+        subset = metadata.filter(
+            pl.col("Graphs").str.split(";").list.contains(wildcards.graph)
+        )
     except AttributeError:
         subset = metadata
     return subset
@@ -92,6 +72,8 @@ include: "snakepit/minigraph.smk"
 include: "snakepit/pangene.smk"
 include: "snakepit/cactus.smk"
 
+# Pangenome alignment
+include: "snakepit/alignment.smk"
 
 # include: 'snakepit/pggb.smk'
 
@@ -101,9 +83,9 @@ include: "snakepit/cactus.smk"
 
 rule all:
     input:
-        "analyses/QC_summary.every.csv",
-        "analyses/PCA/every.eigenvec",
-        "analyses/satellites/every.csv",
-        "analyses/pangene/every.ARS_UCD2.0_Ensembl.clustered.autosomes.tsv",
-        "analyses/minigraph/every/L50/mg.gfa",
-        "cactus/every/genome.full.unchopped.gfa.gz",
+        "analyses/QC_summary.All.csv",
+        "analyses/QC/PCA/Bovinae.biSNPs.eigenvec",
+        "analyses/satellites/Bovinae.csv",
+        "analyses/pangene/Bovinae.ARS_UCD2.0_Ensembl.clustered.tsv",
+        "analyses/minigraph/Bovina/L50/mg.gfa",
+        "cactus/BosTaurus_n1/graph.gbz",
