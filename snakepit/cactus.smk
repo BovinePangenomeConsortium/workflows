@@ -99,7 +99,7 @@ checkpoint cactus_split:
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.chromfile).parent) / "split_TEMPDIR",
     threads: 4
     resources:
-        mem_mb_per_cpu=20000,
+        mem_mb_per_cpu=40000,
         runtime="48h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
@@ -160,12 +160,13 @@ rule cactus_join:
         vg=gather_alignments,
     output:
         multiext(
-            "analyses/cactus/{graph}/{graph}",
+            "analyses/cactus/{graph}/graph",
             gfa_full=".full.unchopped.gfa.gz",
             #gbz_full=".full.gbz",
             #snarls_full=".full.snarls",
             gfa_clip=".unchopped.gfa.gz",
             gbz_clip=".gbz",
+            hapl_clip=".hapl",
             snarls_clip=".snarls",
             stats=".stats.tgz",
         ),
@@ -174,27 +175,29 @@ rule cactus_join:
         reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
         references=" ".join(config.get("additional_references", [])),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.stats).parent) / "join_TEMPDIR",
-    threads: 16
+        _workdir=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.stats).parent),
+    threads: 12
     resources:
-        mem_mb_per_cpu=10000,
-        runtime="24h",
+        mem_mb_per_cpu=30000,
+        runtime="120h",
     container:
         config.get("cactus_image", "docker://docker.io/cactus/cactus:latest")
     shell:
         """
 cactus-graphmap-join \
 {params.jobstore} \
+--workDir {params._workdir} \
 --vg {input.vg} \
 --outDir {params.out_dir} \
---outName {wildcards.graph} \
+--outName graph \
 --reference {params.reference_ID} {params.references} \
 --unchopped-gfa full clip \
 --snarlStats full clip \
 --gbz clip \
 --haplo clip \
 --giraffe clip \
---lrGifaffe clip
+--lrGiraffe clip
 """
 #--vcf full clip \
 #--vcfwave
-
+#https://github.com/Han-Cao/collapse-bubble
