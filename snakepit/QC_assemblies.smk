@@ -206,7 +206,7 @@ rule bcftools_merge:
     threads: 4
     resources:
         mem_mb_per_cpu=12500,
-        walltime="4h",
+        runtime="4h",
     shell:
         """
 bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
@@ -255,4 +255,33 @@ rule simd_sketch_PCA:
     shell:
         """
 simd-sketch matrix --alg bottom -s 100000 -j {threads} {input.fasta} > {output.matrix}
+        """
+
+#TODO: compress fasta? compress out?
+rule repeat_masker:
+    input:
+        fasta = rules.panSN_renaming.output["fasta"],
+        repeats = config.get('repeat_library',[])
+    output:
+        multiext("analyses/masking/{sample}.fa",masked=".masked",out=".out",cat=".cat.gz",tbl=".tbl")
+    params:
+        _dir=lambda wildcards, output: Path(output[0]).parent,
+    threads: 12
+    resources:
+        mem_mb_per_cpu = 3500,
+        runtime = '48h'
+    shell:
+        """
+RepeatMasker -xsmall -pa {threads} -e rmblast -lib {input.repeats} -q -no_is {input.fasta[0]} -dir {params._dir}
+        """
+
+rule gather_masking:
+    input:
+        out = expand(rules.repeat_masker.output["out"],sample=determine_pangenome_samples)
+    output:
+        "analyses/masking/masking_statistics.csv.gz"
+    localrule: True
+    shell:
+        """
+cat {input} > {output}
         """
