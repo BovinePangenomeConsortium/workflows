@@ -202,22 +202,38 @@ rule bcftools_merge:
         fasta = config['references']['ARS_UCD2.0']
     output:
         vcf=multiext("analyses/QC/VCF/{graph}.vcf.gz", "", ".csi"),
-        stats="analyses/QC/VCF/{graph}.vcf.stats",
     threads: 4
     resources:
         mem_mb_per_cpu=12500,
         runtime="4h",
     shell:
         """
-bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} | tr ' ' ',') {input.vcf} |\
+bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} {{X,Y,MT}} | tr ' ' ',') {input.vcf} |\
 bcftools +setGT --threads {threads} -Ou - -- -t . -n 0 |\
 bcftools norm -f {input.fasta} -Ou |\
 bcftools sort -T $TMPDIR -Ou |\
 bcftools norm --threads {threads} -Ou -m+any |\
 bcftools +fill-tags --threads {threads} -Ou - -- -t AF |\
 bcftools annotate --threads {threads} --set-id '%VKX' -W -o {output.vcf[0]}
+        """
 
-bcftools stats --threads {threads} -s - {output.vcf[0]} | grep "^PSC" | cut -f 3,5,7-9,11 > {output.stats}
+rule bcftools_stats:
+    input:
+        vcf=rules.bcftools_merge.output["vcf"]
+    output:
+        stats="analyses/QC/VCF/{graph}.stats.csv",
+    threads: 2
+    resources:
+        mem_mb_per_cpu=2500,
+        runtime="2h"
+    shell:
+        """
+echo "sample,contig,nNonRefHom,nTransitions,nTransversions,nIndels,nSingletons" > {output.stats}
+
+for R in {{1..29}} {{X,Y,MT}}
+  do
+  bcftools stats --threads {threads} -s - -r $R {input.vcf[0]} | grep "^PSC" | awk -v OFS=',' -v R=$R '{{print $3,R,$5,$7,$8,$9,$11}}' >> {output.stats}
+done
         """
 
 

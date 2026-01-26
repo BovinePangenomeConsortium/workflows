@@ -66,7 +66,7 @@ rule cd_hit_collapse_genes:
         runtime="30m",
     shell:
         """
-cd-hit -i {input.peptides} -o {output.peptides} -c 0.9 -aS 0.8 -n 5 -T {threads} -g
+cd-hit -i {input.peptides} -o {output.peptides} -c 0.9 -aS 0.8 -n 5 -T {threads} -g 1
         """
 
 
