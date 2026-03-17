@@ -6,7 +6,7 @@ rule seqtk_prepare:
     input:
         fastq=get_sample_fastq_from_csv
     output:
-        fasta=('analyses/skope/samples/{sample}.fa')
+        fasta=temp('analyses/skope/samples/{sample}.fa')
     threads: 1
     resources:
         mem_mb_per_cpu=5000,
@@ -37,11 +37,23 @@ rule skope_contain:
         fasta=rules.seqtk_prepare.output["fasta"],
         index=rules.skope_index.output["index"]
     output:
-        hits="analyses/skope/containment/{graph}.k{kmer}.s{smer}.{sample}.{mode,group-counts|per-seq}.tsv"
+        hits=temp("analyses/skope/containment/{graph}.k{kmer}.s{smer}.{sample}.{mode,group-counts|per-seq}.tsv")
     threads: 4
     resources:
-        mem_mb_per_cpu=12500
+        mem_mb_per_cpu=15000,
+        runtime="4h"
     shell:
         '''
 skope classify -t {threads} --output-mode {wildcards.mode} --names {wildcards.sample} -o {output.hits} {input.index} {input.fasta}
+        '''
+
+rule skope_gather:
+    input:
+        hits=expand(rules.skope_contain.output["hits"],sample=pl.read_csv(config["SRA"]).get_column("accession"),allow_missing=True)
+    output:
+        hits="analyses/skope/containment/{graph}.k{kmer}.s{smer}.{mode,group-counts|per-seq}.tsv.gz"
+    localrule: True
+    shell:
+        '''
+awk 'FNR>1||NR==1' {input.hits} | pigz -p 4 -c > {output.hits}
         '''
