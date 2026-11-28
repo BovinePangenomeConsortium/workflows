@@ -16,14 +16,16 @@ rule download_annotated_peptides:
     shell:
         """
 wget --quiet -O {wildcards.peptides}.TMP.fa.gz {params.url_peptides}
-wget --quiet -O {output.GTF} {params.url_GTF}
+wget --quiet -O {wildcards.peptides}.TMP.gtf.gz {params.url_GTF}
+
+mv {wildcards.peptides}.TMP.fa.gz {output.peptides}
 
 if [[ "{wildcards.peptides}" == *"RefSeq"* ]]; then
-    wget {params.url_chromalias}
-    zcat {wildcards.peptides}.TMP.fa.gz | awk -F'\\t' 'NR==FNR{{if($0!~/^#/){{key=$1;val=$4;if(val=="")val=key;a[key]=val}}next}} !/^#/{{if($1 in a)$1=a[$1]}}1' GCF_002263795.3.chromAlias.txt - | bgzip -c > {output.peptides}
-    rm GCF_002263795.3.chromAlias.txt {wildcards.peptides}.TMP.fa.gz
-elif [[ "{wildcards.peptides}" == *"Ensembl"* ]]; then
-  mv {wildcards.peptides}.TMP.fa.gz {output.peptides}
+    wget --quiet -O {wildcards.peptides}.chromAlias.txt {params.url_chromalias}
+    zcat {wildcards.peptides}.TMP.gtf.gz | awk -F'\\t' 'BEGIN{{OFS="\\t"}} NR==FNR{{if($0!~/^#/){{key=$1;val=$4;if(val=="")val=key;a[key]=val}}next}} !/^#/{{if($1 in a)$1=a[$1]}}1' {wildcards.peptides}.chromAlias.txt - | bgzip -c > {output.GTF}
+    rm -f {wildcards.peptides}.chromAlias.txt {wildcards.peptides}.TMP.gtf.gz
+else
+    mv {wildcards.peptides}.TMP.gtf.gz {output.GTF}
 fi
         """
 
@@ -102,7 +104,7 @@ minisplice predict -t {threads} -c {input.cali[1]} {input.cali[0]} {input.fasta[
 
 rule miniprot_index:
     input:
-        fasta=rules.panSN_renaming.output["fasta"],
+        fasta=rules.panSN_renaming.output["fasta"][0],
     output:
         index="analyses/pangene/{sample}.mpi",
     threads: 4
@@ -120,7 +122,7 @@ rule miniprot_align:
         fasta=(
             rules.miniprot_index.output["index"]
             if config.get("miniprot_index", False)
-            else rules.panSN_renaming.output["fasta"]
+            else rules.panSN_renaming.output["fasta"][0]
         ),
         splicing=rules.minisplice_predict.output["splicing"],
         peptides=lambda wildcards: (

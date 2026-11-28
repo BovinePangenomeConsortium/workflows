@@ -1,46 +1,58 @@
 rule cut_assemblies_at_gaps:
     input:
-        fasta=multiext("data/raw_assemblies/{sample}.fasta.gz", "", ".fai", ".gzi"),
+        fasta=rules.stage_assembly.output["fasta"][0],
     output:
-        fasta="data/contigs/{sample}.fa",
+        fasta=temp("data/contigs/{sample}.fa"),
+    params:
+        min_gap=config.get("cut_gap_min_len", 10),
     threads: 1
     resources:
         mem_mb_per_cpu=1000,
         runtime="30m",
     shell:
         """
-seqtk cutN -n 0 {input.fasta[0]} |\
-sed 's/_RagTag//' > {output}
+seqtk cutN -n {params.min_gap} {input.fasta} > {output.fasta}
         """
+
+
+def _ragtag_inputs(wildcards):
+    rec = manifest_records[wildcards.sample]
+    ref_path = config["references"][wildcards.reference]
+    ref_fai = f"{ref_path}.fai"
+    if rec.format_mode in ("ragtag_preserve", "already_placed", "intact"):
+        return {
+            "fasta": rules.stage_assembly.output["fasta"][0],
+            "fai": rules.stage_assembly.output["fasta"][1],
+            "reference": ref_path,
+            "reference_fai": ref_fai,
+        }
+    return {
+        "fasta": rules.cut_assemblies_at_gaps.output["fasta"],
+        "reference": ref_path,
+        "reference_fai": ref_fai,
+    }
 
 
 # We ideally want a reference with an X, Y, and MT so nothing goes missing...
 rule ragtag_scaffold:
     input:
-        fasta=lambda wildcards: (
-            "data/raw_assemblies/{sample}.fasta.gz"
-            if wildcards.sample in ANNOTATED_GENOMES
-            else rules.cut_assemblies_at_gaps.output["fasta"]
-        ),
-        reference=lambda wildcards: config["references"][wildcards.reference],
+        unpack(_ragtag_inputs),
     output:
-        multiext(
-            "analyses/scaffolding/{reference}/{sample}/ragtag.scaffold",
-            ".agp",
-            ".fasta",
-            ".err",
-            ".confidence.txt",
-            ".stats",
-            ".asm.paf",
-            ".asm.paf.log",
-        ),
+        agp="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.agp",
+        fasta=temp("analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.fasta"),
+        err="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.err",
+        confidence="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.confidence.txt",
+        stats="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.stats",
+        paf="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.asm.paf",
+        log="analyses/scaffolding/{reference}/{sample}/ragtag.scaffold.asm.paf.log",
     params:
-        _dir=lambda wildcards, output: Path(output[0]).parent,
-        mm2_opt="--cs -c -x asm10",
-        exclude_unplaced=f"^({'|'.join(list(map(str, range(1,30)))+['X', 'Y', 'MT'])})",
+        _dir=lambda wildcards, output: Path(output.agp).parent,
+        mm2_opt=config.get("ragtag_mm2_opt", "--cs -c -x asm10"),
+        exclude_unplaced=f"^({'|'.join(ALL_CHROMOSOME)})\\t",
         annotated_exclude=lambda wildcards: (
             "-j $TMPDIR/query_exclude.txt"
-            if wildcards.sample in ANNOTATED_GENOMES
+            if manifest_records[wildcards.sample].format_mode
+            in ("ragtag_preserve", "already_placed", "intact")
             else ""
         ),
     conda:
@@ -51,11 +63,11 @@ rule ragtag_scaffold:
         runtime="4h",
     shell:
         """
-grep -vwP "{params.exclude_unplaced}" {input.reference}.fai | cut -f 1 > $TMPDIR/unplaced.txt
+{{ grep -vP "{params.exclude_unplaced}" {input.reference_fai} || test $? = 1; }} | cut -f 1 > $TMPDIR/unplaced.txt
 
-if [ ! -z "{params.annotated_exclude}" ];
+if [ -n "{params.annotated_exclude}" ];
 then
-  grep -vwP "{params.exclude_unplaced}" {input.fasta}.fai | cut -f 1 > $TMPDIR/query_exclude.txt
+  {{ grep -vP "{params.exclude_unplaced}" {input.fai} || test $? = 1; }} | cut -f 1 > $TMPDIR/query_exclude.txt
 fi
 
 ragtag.py scaffold {input.reference} {input.fasta} \
@@ -65,66 +77,86 @@ ragtag.py scaffold {input.reference} {input.fasta} \
         """
 
 
-# Uses the layout defined in the BPC spreadsheet
-def map_ID_to_filename(sample):
-    filename_map = dict(
-        pl.read_csv(config["metadata"]).select(["ID", "Filename"]).iter_rows()
-    )
+def _pansn_renaming_inputs(wildcards):
+    rec = manifest_records[wildcards.sample]
+    if rec.format_mode in ("intact", "already_placed"):
+        inputs = {
+            "fasta": rules.stage_assembly.output["fasta"][0],
+            "fai": rules.stage_assembly.output["fasta"][1],
+        }
+        if rec.chrom_map:
+            inputs["chrom_map"] = rec.chrom_map
+        else:
+            inputs["ncbi_chrom_map"] = rules.stage_assembly.output["ncbi_chrom_map"]
+        return inputs
+    if rec.format_mode == "ragtag_preserve":
+        return {
+            "fasta": rules.stage_assembly.output["fasta"][0],
+            "fai": rules.stage_assembly.output["fasta"][1],
+            "agp": expand(
+                rules.ragtag_scaffold.output["agp"],
+                reference=REFERENCE_ID,
+                allow_missing=True,
+            )[0],
+        }
+    return {
+        "fasta": rules.cut_assemblies_at_gaps.output["fasta"],
+        "agp": expand(
+            rules.ragtag_scaffold.output["agp"],
+            reference=REFERENCE_ID,
+            allow_missing=True,
+        )[0],
+    }
 
-    return filename_map[sample]
 
-
-# TODO: need to convert the P lines later in pggb to vg format [start-end] rather than :start-end
-def panSN_naming_schema(sample, schema="cactus"):
-    haplotype = (
-        metadata.filter(pl.col("Filename") == sample)
-        .get_column("Haplotype")
-        .to_list()[0]
-    )
-    animal_ID = (
-        metadata.filter(pl.col("Filename") == sample)
-        .get_column("Animal ID")
-        .to_list()[0]
-    )
-    naming = f'">{animal_ID}#{haplotype}#"$1'
-    match schema:
-        case "cactus":
-            naming += '":"$2"-"$3'
-        case "vg":
-            naming += '"["$2"-"$3"]"'
-        case "_":
-            naming += '"_"$2"-"$3'
-    return naming
+def _pansn_mode_args(wildcards, input):
+    rec = manifest_records[wildcards.sample]
+    if rec.format_mode in ("intact", "already_placed"):
+        args = "--intact" if rec.format_mode == "intact" else "--already-placed"
+        cmap = getattr(input, "chrom_map", "")
+        if cmap:
+            return f"{args} --chrom-map {cmap}"
+        ncbi_cmap = getattr(input, "ncbi_chrom_map", "")
+        if ncbi_cmap:
+            return f"{args} --optional-chrom-map {ncbi_cmap}"
+        return args
+    return f"--agp {input.agp}"
 
 
 rule panSN_renaming:
     input:
-        fasta=rules.ragtag_scaffold.input["fasta"],
-        agp=expand(
-            rules.ragtag_scaffold.output[0], reference="ARS_UCD2.0", allow_missing=True
-        ),
+        unpack(_pansn_renaming_inputs),
     output:
         fasta=multiext(
-            str(Path(config.get("assemblies_dir", "")) / "{sample}.fa.gz"),
+            str(ASSEMBLIES_DIR / "{sample}.fa.gz"),
             "",
             ".fai",
             ".gzi",
         ),
+        report="analyses/ingest/{sample}.pansn.json",
     params:
-        naming_schema=lambda wildcards: panSN_naming_schema(wildcards.sample),
+        script=workflow.source_path("../scripts/format_pansn.py"),
+        animal_id=lambda wildcards: manifest_records[wildcards.sample].animal_id,
+        haplotype=lambda wildcards: manifest_records[wildcards.sample].haplotype,
+        schema=config.get("pansn_schema", "cactus"),
+        chroms=",".join(ALL_CHROMOSOME),
+        mode_args=_pansn_mode_args,
     threads: 2
     resources:
         mem_mb_per_cpu=2500,
         runtime="1h",
     shell:
         """
-seqtk seq -l 0 -U {input.fasta} |\
-awk 'function revcomp(arg) {{o = "";for(i = length(arg); i > 0; i--) {{o = o c[substr(arg, i, 1)]}} return(o)}}; BEGIN {{c["A"] = "T"; c["C"] = "G"; c["G"] = "C"; c["T"] = "A"}}; {{if (NR==FNR) {{if($5=="W") {{if ($1~/^[0-9XYM]/&&$1~/_RagTag/) {{sub("_RagTag","",$1);}}else {{$1="unplaced_"NR;}}V[">"$6]=$9;C[$1]++;R[">"$6]={params.naming_schema};}}}}else {{if ($1~/^>/) {{printf "%s\\t",R[$1]; Z=V[$1] }} else {{if (Z=="+") {{print $1;}} else {{print revcomp($1);}}}}}}}}' {input.agp} - |\
-sort -k1,1V |\
-tr "\\t" "\\n" |\
-bgzip -c -@ 2 - > {output.fasta[0]}
-
-samtools faidx {output.fasta[0]}
+python3 {params.script} format \
+  --fasta {input.fasta} \
+  --animal-id {params.animal_id} \
+  --haplotype {params.haplotype} \
+  --output {output.fasta[0]} \
+  {params.mode_args} \
+  --schema {params.schema} \
+  --chroms "{params.chroms}" \
+  --threads {threads} \
+  --report {output.report}
         """
 
 
@@ -150,83 +182,46 @@ rule panSN_split:
         fasta=rules.panSN_renaming.output["fasta"],
     output:
         fasta=expand(
-            Path(config.get("assemblies_dir", ""))
-            / "chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
-            ext=("", ".fai", ".gzi"),
-            chromosome=list(map(str, range(1, 30))),
+            ASSEMBLIES_DIR / "chromosomes/{{sample}}.{chromosome}.fa.gz",
+            chromosome=ALL_CHROMOSOME,
+        ),
+        fai=expand(
+            ASSEMBLIES_DIR / "chromosomes/{{sample}}.{chromosome}.fa.gz.fai",
+            chromosome=ALL_CHROMOSOME,
+        ),
+        gzi=expand(
+            ASSEMBLIES_DIR / "chromosomes/{{sample}}.{chromosome}.fa.gz.gzi",
+            chromosome=ALL_CHROMOSOME,
         ),
     params:
-        regex=lambda wildcards: "" if wildcards.sample in ANNOTATED_GENOMES else r"#\d",
-        _out=lambda wildcards, output: Path(output["fasta"][0])
-        .with_suffix("")
-        .with_suffix("")
-        .with_suffix(""),
+        script=workflow.source_path("../scripts/format_pansn.py"),
+        out_dir=str(ASSEMBLIES_DIR / "chromosomes"),
+        chroms=",".join(ALL_CHROMOSOME),
     threads: 1
     resources:
         mem_mb_per_cpu=2500,
         runtime="30m",
     shell:
         """
-for C in {{1..29}}
-do
-  samtools faidx  --write-index -r <(grep -P "#$C:" {input.fasta[1]} | cut -f 1) -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
-done
-        """
-
-
-# TODO: this still doesn't like getting non-existant chromosomes
-rule panSN_split2:
-    input:
-        fasta=multiext(
-            str(Path(config.get("assemblies_dir", "")) / "{sample}.fa.gz"),
-            "",
-            ".fai",
-            ".gzi",
-        ),
-    output:
-        fasta=expand(
-            Path(config.get("assemblies_dir", ""))
-            / "chromosomes/{{sample}}.{chromosome}.fa.gz{ext}",
-            ext=("", ".fai", ".gzi"),
-            chromosome=["X", "Y", "MT"],
-        ),
-    params:
-        regex=lambda wildcards: "" if wildcards.sample in ANNOTATED_GENOMES else r"#\d",
-        _out=lambda wildcards, output: Path(output["fasta"][0])
-        .with_suffix("")
-        .with_suffix("")
-        .with_suffix(""),
-    threads: 1
-    resources:
-        mem_mb_per_cpu=2500,
-        runtime="30m",
-    shell:
-        """
-for C in X Y MT
-do
-  #ugly hack to avoid turning off pipefail. Grep returns exit code of 1 if no matches, which we will allow
-  {{ grep -P "#$C{params.regex}\\s" {input.fasta[1]} || test $? = 1; }} | cut -f 1 > $TMPDIR/regions.list
-  if [ -s $TMPDIR/regions.list ]
-  then
-    samtools faidx --continue --write-index --region-file $TMPDIR/regions.list -o {params._out}.$C.fa.gz --length 0 {input.fasta[0]}
-  else
-    touch {params._out}.$C.fa.gz {params._out}.$C.fa.gz.fai {params._out}.$C.fa.gz.gzi
-  fi
-done
+python3 {params.script} split \
+  --fasta {input.fasta[0]} \
+  --out-dir {params.out_dir} \
+  --sample {wildcards.sample} \
+  --chroms "{params.chroms}" \
+  --threads {threads}
         """
 
 
 rule panSN_gather:
     input:
         assemblies=expand(
-            Path(config.get("assemblies_dir", ""))
-            / "chromosomes/{sample}.{chromosome}.fa.gz",
+            ASSEMBLIES_DIR / "chromosomes/{sample}.{chromosome}.fa.gz",
             sample=determine_pangenome_samples,
             allow_missing=True,
         ),
     output:
         fasta=multiext(
-            str(Path(config.get("assemblies_dir", "")) / "{graph}/{chromosome}.fa.gz"),
+            str(ASSEMBLIES_DIR / "{graph}/{chromosome}.fa.gz"),
             "",
             ".fai",
             ".gzi",

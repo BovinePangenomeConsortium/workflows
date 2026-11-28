@@ -1,0 +1,4 @@
+animal_id	haplotype	sex	species	subspecies	breed	source	format_mode	chrom_map	checksum	qc_fail	exclude_reason	graphs	tags	reference_annotation
+AAAA0000	1	M	Bos taurus	Taurine	BreedA	data/raw_assemblies/AAAA0000_1.fasta.gz	intact					All;Bovinae;BosTaurus_n1	primary	
+AAAA0000	2	M	Bos taurus	Taurine	BreedA	data/raw_assemblies/AAAA0000_2.fasta.gz	ragtag_preserve					All;Bovinae	annotated	Y
+BBBB1111	0	F	Bos taurus	Taurine	BreedA	data/raw_assemblies/BBBB1111_0.fasta.gz	already_placed	data/chrom_map.tsv				All;Bovinae;BosTaurus_n1	reference	
