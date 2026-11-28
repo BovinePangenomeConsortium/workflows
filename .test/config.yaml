@@ -1,11 +1,41 @@
+metadata: "assemblies.tsv"
 
-metadata: 'BPC_metadata.csv'
-
+raw_assemblies_dir: "data/raw_assemblies"
+staged_assemblies_dir: "data/staged_assemblies"
 assemblies_dir: "data/assemblies"
+
+reference_ID: "ARS_UCD2.0"
+default_format_mode: "intact"
+min_contig_len: 0  # set e.g. 10000 or 50000 in production to drop tiny unplaced fragments
+cut_gap_min_len: 10
+pansn_schema: "cactus"
+
 references:
-  ARS_UCD2.0: 'data/ARS.fa'
+  ARS_UCD2.0: "data/ARS.fa"
 
 peptides:
   ARS_UCD2.0_Ensembl:
-    proteins: 'https://ftp.ensembl.org/pub/release-115/fasta/bos_taurus/pep/Bos_taurus.ARS-UCD2.0.pep.all.fa.gz'
-    GTF: 'https://ftp.ensembl.org/pub/release-115/gtf/bos_taurus/Bos_taurus.ARS-UCD2.0.115.gtf.gz'
+    proteins: "https://ftp.ensembl.org/pub/release-115/fasta/bos_taurus/pep/Bos_taurus.ARS-UCD2.0.pep.all.fa.gz"
+    GTF: "https://ftp.ensembl.org/pub/release-115/gtf/bos_taurus/Bos_taurus.ARS-UCD2.0.115.gtf.gz"
+
+graphs:
+  All:
+    exclude_qc_fail: false
+  Bovinae:
+    exclude_qc_fail: true
+  Bovina:
+    exclude_qc_fail: true
+    species: ["Bos taurus"]
+  BosTaurus_n1:
+    exclude_qc_fail: true
+    species: ["Bos taurus"]
+    one_per_animal: true
+
+qc_thresholds:
+  min_genome_bp: 2300000000
+  max_genome_bp: 3300000000
+  min_ng50: 1000000
+  min_autosome_cov: 0.80
+  min_busco_complete: 90.0
+  x_cov_female_min: 0.70
+  y_cov_male_min: 0.15

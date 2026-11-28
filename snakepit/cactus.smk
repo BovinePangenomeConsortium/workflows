@@ -1,24 +1,50 @@
 # very stripped back version of https://github.com/harvardinformatics/cactus-snakemake/blob/main/cactus_minigraph.smk
 
+rule cactus_prepare_fasta:
+    input:
+        fasta=rules.panSN_renaming.output["fasta"][0],
+    output:
+        fasta=temp(
+            multiext("analyses/cactus/inputs/{sample}.fa.gz", "", ".fai", ".gzi")
+        ),
+    params:
+        script=workflow.source_path("../scripts/format_pansn.py"),
+    threads: 2
+    resources:
+        mem_mb_per_cpu=2000,
+        runtime="30m",
+    shell:
+        """
+python3 {params.script} strip-pansn \
+  --fasta {input.fasta} \
+  --output {output.fasta[0]} \
+  --threads {threads}
+        """
+
+
 rule cactus_make_seqfile:
     input:
-        fasta=expand(rules.panSN_renaming.output["fasta"],sample=determine_pangenome_samples,allow_missing=True),
+        fasta=expand(
+            rules.cactus_prepare_fasta.output["fasta"][0],
+            sample=determine_pangenome_samples,
+            allow_missing=True,
+        ),
         metadata=config["metadata"],
     output:
         seqfile="analyses/cactus/{graph}/seqfile.tsv",
     localrule: True
     run:
-        metadata = pl.read_csv(input.metadata, infer_schema_length=10000)
-        if wildcards.graph == "every":
-            subset = metadata
-        else:
-            subset = metadata.filter(
-                pl.col("Graphs").str.split(";").list.contains(wildcards.graph)
-            )
+        samples = determine_pangenome_samples(wildcards)
+        ref_ids = [
+            config.get("reference_ID", REFERENCE_ID),
+            *config.get("additional_references", []),
+        ]
         with open(output.seqfile, "w") as fout:
-            for row in subset.iter_rows(named=True):
+            for sample in samples:
+                rec = manifest_records[sample]
+                seq_name = _bpc_manifest.cactus_seqfile_name(rec, ref_ids)
                 fout.write(
-                    f"{row["Animal ID"]}.{row["Haplotype"]}\t{Path(config["assemblies_dir"]) / f"{row["Animal ID"]}_{row["Haplotype"]}.fa.gz"}\n"
+                    f"{seq_name}\tanalyses/cactus/inputs/{rec.sample}.fa.gz\n"
                 )
 
 
@@ -26,14 +52,14 @@ rule cactus_minigraph:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
         fasta=expand(
-            rules.panSN_renaming.output["fasta"],
+            rules.cactus_prepare_fasta.output["fasta"][0],
             sample=determine_pangenome_samples,
             allow_missing=True,
         ),
     output:
         gfa="analyses/cactus/{graph}/sv.gfa",
     params:
-        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        reference_ID=config.get("reference_ID", REFERENCE_ID),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.gfa).parent) / "minigraph_TEMPDIR",
     threads: 18
     resources:
@@ -55,6 +81,11 @@ cactus-minigraph \
 rule cactus_graphmap:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
+        fasta=expand(
+            rules.cactus_prepare_fasta.output["fasta"][0],
+            sample=determine_pangenome_samples,
+            allow_missing=True,
+        ),
         gfa=rules.cactus_minigraph.output.gfa,
     output:
         multiext(
@@ -66,7 +97,7 @@ rule cactus_graphmap:
             paf_unfiltered=".paf.unfiltered.gz",
         ),
     params:
-        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        reference_ID=config.get("reference_ID", REFERENCE_ID),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.paf).parent) / "graphmap_TEMPDIR",
     threads: 18
     resources:
@@ -89,13 +120,18 @@ cactus-graphmap \
 checkpoint cactus_split:
     input:
         seqfile=ancient(rules.cactus_make_seqfile.output["seqfile"]),
+        fasta=expand(
+            rules.cactus_prepare_fasta.output["fasta"][0],
+            sample=determine_pangenome_samples,
+            allow_missing=True,
+        ),
         gfa=rules.cactus_minigraph.output.gfa,
         paf=rules.cactus_graphmap.output.paf,
     output:
         split_dir=directory("analyses/cactus/{graph}/split"),
         chromfile="analyses/cactus/{graph}/split/chromfile.txt",
     params:
-        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        reference_ID=config.get("reference_ID", REFERENCE_ID),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.chromfile).parent) / "split_TEMPDIR",
     threads: 4
     resources:
@@ -122,7 +158,7 @@ rule cactus_align:
     output:
         multiext("analyses/cactus/{graph}/align/{contig}", hal=".hal", vg=".vg"),
     params:
-        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        reference_ID=config.get("reference_ID", REFERENCE_ID),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.vg).parent) / "align_TEMPDIR",
     threads: 6
     resources:
@@ -172,7 +208,7 @@ rule cactus_join:
         ),
     params:
         out_dir=lambda wildcards, output: Path(output[0]).parent,
-        reference_ID=config.get("reference_ID", "ARS_UCD2.0"),
+        reference_ID=config.get("reference_ID", REFERENCE_ID),
         references=" ".join(config.get("additional_references", [])),
         jobstore=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.stats).parent) / "join_TEMPDIR",
         _workdir=lambda wildcards,output: (Path("$TMPDIR") if config.get('jobstore',True) else Path(output.stats).parent),

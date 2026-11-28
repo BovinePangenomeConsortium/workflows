@@ -1,11 +1,9 @@
 # subset by graph
 def get_reference_sense_path():
-    for entry in metadata.filter(pl.col("Reference annotation") == "Y").iter_rows(
-        named=True
-    ):
-        yield f"{entry['Animal ID']}"
+    for sample in ANNOTATED_GENOMES:
+        yield manifest_records[sample].animal_id
         # see https://github.com/vgteam/vg/issues/4533
-        # yield f"{entry['Animal ID']}#{entry['Haplotype']}"
+        # yield f"{manifest_records[sample].animal_id}#{manifest_records[sample].haplotype}"
 
 
 # vg simplify -t 2 -P 85D7A68E -L 0.8 -m 20 small.pg > small_filtered_no_K.pg
@@ -87,7 +85,7 @@ rule concat_reference_sequence:
         ),
     output:
         fasta=multiext(
-            "data/currated_assemblies/{graph}/whole_genome.fa.gz", "", ".fai", ".gzi"
+            str(ASSEMBLIES_DIR / "{graph}/whole_genome.fa.gz"), "", ".fai", ".gzi"
         ),
     localrule: True
     shell:

@@ -3,11 +3,13 @@ rule calculate_N50:
         fasta=rules.panSN_renaming.output["fasta"],
     output:
         "analyses/QC/contiguity/{sample}.N50",
+    params:
+        min_gap=config.get("cut_gap_min_len", 10),
     resources:
         runtime="30m",
     shell:
         """
-seqtk cutN -n 0 {input.fasta[0]} |\
+seqtk cutN -n {params.min_gap} {input.fasta[0]} |\
 calN50.js -L 3G - > {output}
         """
 
@@ -51,9 +53,28 @@ rm -rf {params._dir}/artiodactyla_odb12
         """
 
 
+rule align_assembly_to_reference:
+    input:
+        fasta=rules.panSN_renaming.output["fasta"][0],
+        reference=lambda wildcards: config["references"][wildcards.reference],
+        reference_fai=lambda wildcards: f"{config['references'][wildcards.reference]}.fai",
+    output:
+        paf="analyses/QC/reference_alignment/{sample}.{reference}.asm.paf",
+    params:
+        mm2_opt=config.get("qc_mm2_opt", "-cx asm10 --cs"),
+    threads: 6
+    resources:
+        mem_mb_per_cpu=8000,
+        runtime="4h",
+    shell:
+        """
+minimap2 -t {threads} {params.mm2_opt} {input.reference} {input.fasta} > {output.paf}
+        """
+
+
 rule calculate_variant_level:
     input:
-        paf=rules.ragtag_scaffold.output[5],
+        paf=rules.align_assembly_to_reference.output["paf"],
         reference=lambda wildcards: config["references"][wildcards.reference],
     output:
         vcf=multiext(
@@ -126,7 +147,7 @@ paste <(awk -v OFS='\\t' 'BEGIN {{print "chromosome","start"}} {{print $1,$2}}' 
 
 rule calculate_reference_coverage:
     input:
-        paf=rules.ragtag_scaffold.output[5],
+        paf=rules.align_assembly_to_reference.output["paf"],
         fai=lambda wildcards: f"{config['references'][wildcards.reference]}.fai",
     output:
         bed="analyses/QC/reference_alignment/{sample}.{reference}.covered.bed",
@@ -151,12 +172,12 @@ rule summarise_sample_metrics:
         busco=rules.calculate_gene_completeness.output["metrics"][0],
         variants=expand(
             rules.calculate_variant_level.output["vcf"],
-            reference="ARS_UCD2.0",
+            reference=REFERENCE_ID,
             allow_missing=True,
         ),
         bed=expand(
             rules.calculate_reference_coverage.output["bed"],
-            reference="ARS_UCD2.0",
+            reference=REFERENCE_ID,
             allow_missing=True,
         ),
     output:
@@ -192,23 +213,45 @@ rule summarise_all_metrics:
         """
 
 
+rule merge_metadata_and_qc:
+    input:
+        manifest=config["metadata"],
+        qc=rules.summarise_all_metrics.output["metrics"],
+    output:
+        tsv="analyses/QC/BPC_metadata_with_QC.{graph}.tsv",
+    params:
+        script=workflow.source_path("../scripts/manifest.py"),
+        thresholds=json.dumps(config.get("qc_thresholds", {})),
+    localrule: True
+    shell:
+        """
+python3 {params.script} merge-qc \
+  --manifest {input.manifest} \
+  --qc {input.qc} \
+  --output {output.tsv} \
+  --thresholds-json '{params.thresholds}'
+        """
+
+
 rule bcftools_merge:
     input:
         vcf=expand(
             rules.calculate_variant_level.output["vcf"][0],
             sample=determine_pangenome_samples,
-            reference="ARS_UCD2.0",
+            reference=REFERENCE_ID,
         ),
-        fasta = config['references']['ARS_UCD2.0']
+        fasta=config["references"][REFERENCE_ID],
     output:
         vcf=multiext("analyses/QC/VCF/{graph}.vcf.gz", "", ".csi"),
+    params:
+        regions=",".join(ALL_CHROMOSOME),
     threads: 4
     resources:
         mem_mb_per_cpu=12500,
         runtime="4h",
     shell:
         """
-bcftools merge --threads {threads} -Ou -r $(echo {{1..29}} {{X,Y,MT}} | tr ' ' ',') {input.vcf} |\
+bcftools merge --threads {threads} -Ou -r {params.regions} {input.vcf} |\
 bcftools +setGT --threads {threads} -Ou - -- -t . -n 0 |\
 bcftools norm -f {input.fasta} -Ou |\
 bcftools sort -T $TMPDIR -Ou |\
@@ -222,6 +265,8 @@ rule bcftools_stats:
         vcf=rules.bcftools_merge.output["vcf"]
     output:
         stats="analyses/QC/VCF/{graph}.stats.csv",
+    params:
+        chroms=" ".join(ALL_CHROMOSOME),
     threads: 2
     resources:
         mem_mb_per_cpu=2500,
@@ -230,7 +275,7 @@ rule bcftools_stats:
         """
 echo "sample,contig,nNonRefHom,nTransitions,nTransversions,nIndels,nSingletons" > {output.stats}
 
-for R in {{1..29}} {{X,Y,MT}}
+for R in {params.chroms}
   do
   bcftools stats --threads {threads} -s - -r $R {input.vcf[0]} | grep "^PSC" | awk -v OFS=',' -v R=$R '{{print $3,R,$5,$7,$8,$9,$11}}' >> {output.stats}
 done
